@@ -69,6 +69,45 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
 - 提示词中性化（`SANITIZE_PROMPT=1`）对官方 App 同样生效——App 发送的提示词同样
   会被 7863 的渠道指纹拦截，桥接已统一改写
 
+## 界面语言（实测结论）
+
+官方 App **自带 Language 设置**：Settings → General → Language（App UI 语言），
+下拉可选简体中文 / 繁體中文（台灣/香港）等，选择会持久化。
+
+**但实测：把 Language 设为「简体中文」并重启后，Codex 业务界面（New chat /
+Scheduled / Plugins / Recents / What should we build?）仍是英文。**
+
+原因（已核实）：
+- App 是 Chromium 内核打包（chrome.dll 336MB + 220 个语言包，含 zh-CN.pak），
+  但 zh-CN.pak 只覆盖框架层文案（右键菜单、系统对话框）
+- Codex 业务界面的文案在前端资源（app.asar）里，当前版本**没有中文翻译**
+- `--lang=zh-CN` 启动参数同样无效（只影响框架层）
+
+**无法安全汉化**：App 装在 `C:\Program Files\WindowsApps\`，实测写入被拒——
+该目录由 TrustedInstaller 保护且有 Store 签名校验（AppxSignature.p7x），
+修改 app.asar 会破坏签名导致 App 无法启动。等官方补全中文是唯一正路。
+
+## Computer use 为什么是灰的（不破解）
+
+App 内 *Computer use*（让 ChatGPT 驱动本机应用，如 Chrome）显示
+`Disabled by your organization or unavailable in your region`。
+
+**这是 OpenAI 服务端的区域/账号灰度，不做客户端破解**，三个理由：
+
+1. 这类功能开关通常在服务端二次校验——客户端强开大概率被服务端拒绝，白做
+2. 绕过 OpenAI 的区域访问控制违反其服务条款
+3. 有现成的合法替代
+
+**替代方案（本机已具备）**：
+
+| 需求 | 用什么 |
+|---|---|
+| 操控本机应用（GUI 自动化） | CC GUI 自带的 computer-use 驱动（`ccgui-computer-use.exe`） |
+| 浏览器自动化 | ZCode 的 browser-use；Codex CLI 的 `browser_use` 特性也是 stable |
+| 网关对话 | 官方 App / CC GUI / CLI 三端走同一桥接 |
+
+另外，7864 网关实测**没有** 11128 渠道指纹校验，是更干净的上游。
+
 ## 与 CC GUI 的取舍
 
 | | 官方桌面 App | CC GUI |

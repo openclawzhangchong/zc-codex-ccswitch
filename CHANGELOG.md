@@ -18,6 +18,17 @@
   （`Disabled by your organization or unavailable in your region`），与桥接无关
 - 新增 `test/test-desktop-app.ps1` 检测官方 App 安装与桥接兼容性
 
+### 界面语言与 Computer use 的实测结论
+
+- 官方 App 自带 Language 设置（General → Language，可选简体中文）并会持久化，
+  但**Codex 业务界面暂无中文翻译**：设为简体中文并重启后 New chat / Recents /
+  What should we build? 仍为英文。zh-CN.pak 只覆盖 Chromium 框架层
+- 汉化 app.asar 不可行：WindowsApps 只读且有 Store 签名校验（实测写入被拒）
+- Computer use 的区域/账号灰度**不做客户端破解**：服务端会二次校验（大概率
+  无效），且违反 OpenAI 条款；本机已有替代（CC GUI 的 computer-use 驱动、
+  browser-use 自动化）
+- 包真实性核实：SignatureKind=Store，由官方 CLI 的 `codex app` 调起，深度
+  读取 ~/.codex（会话与 config 三端共享），确认非仿冒
 ### 多上游路由：两个网关的全部模型可在 CC GUI/官方 App 自选
 
 - api2codex 升级为多上游路由：读 `routes.json`，默认上游 + 前缀路由
