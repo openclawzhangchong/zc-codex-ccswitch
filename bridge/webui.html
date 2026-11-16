@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex 桥接管理</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --line: #2a2f3a;
+    --text: #e6e8ec;
+    --muted: #8b93a3;
+    --accent: #3b82f6;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 24px; border-bottom: 1px solid var(--line);
+    background: var(--panel); position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 999px; font-size: 12px;
+    border: 1px solid var(--line); background: var(--panel-2);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dot.off { background: var(--bad); }
+  main { max-width: 900px; margin: 0 auto; padding: 24px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 14px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .provider {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel-2); margin-bottom: 10px;
+  }
+  .provider.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .provider .grow { flex: 1; min-width: 0; }
+  .provider .name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .provider .meta {
+    color: var(--muted); font-size: 12px; margin-top: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tag {
+    font-size: 11px; padding: 1px 7px; border-radius: 4px;
+    background: rgba(59,130,246,.15); color: #93c5fd; border: 1px solid rgba(59,130,246,.3);
+  }
+  button {
+    font: inherit; cursor: pointer; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    padding: 7px 13px; transition: .15s;
+  }
+  button:hover:not(:disabled) { background: #262b36; border-color: #3a4150; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #2f74e8; }
+  button.danger { color: #fca5a5; }
+  button.danger:hover:not(:disabled) { background: rgba(239,68,68,.12); border-color: var(--bad); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px; }
+  input[type=text], input[type=password], textarea {
+    width: 100%; padding: 9px 11px; border-radius: 7px;
+    border: 1px solid var(--line); background: #12151b; color: var(--text);
+    font: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  .empty { color: var(--muted); text-align: center; padding: 26px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .toast {
+    position: fixed; right: 22px; bottom: 22px; padding: 12px 16px;
+    border-radius: 9px; background: #1f2430; border: 1px solid var(--line);
+    box-shadow: 0 8px 26px rgba(0,0,0,.5); opacity: 0; transform: translateY(10px);
+    transition: .22s; pointer-events: none; max-width: 340px; font-size: 13px;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.ok { border-color: var(--ok); }
+  .toast.err { border-color: var(--bad); }
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.62);
+    display: none; align-items: center; justify-content: center; padding: 22px; z-index: 50;
+  }
+  .modal.show { display: flex; }
+  .modal .box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    width: 100%; max-width: 520px; padding: 22px; max-height: 90vh; overflow: auto;
+  }
+  .modal h3 { margin: 0 0 4px; font-size: 15px; }
+  .switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .switchrow .txt { color: var(--muted); font-size: 12px; margin-top: 4px; max-width: 520px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Codex 桥接管理</h1>
+  <span class="pill"><span id="dot" class="dot"></span><span id="statusText">检查中…</span></span>
+  <span class="pill" id="targetPill" style="display:none"></span>
+  <div style="flex:1"></div>
+  <button id="btnRestart">重启桥接</button>
+</header>
+
+<main>
+  <div class="card">
+    <h2>上游供应商</h2>
+    <div id="list"></div>
+    <div class="actions" style="justify-content: flex-start">
+      <button class="primary" id="btnAdd">+ 添加上游</button>
+    </div>
+    <div class="hint">同一时间只有一个供应商生效。切换后会重写 .env 并重启桥接。</div>
+  </div>
+
+  <div class="card">
+    <div class="switchrow">
+      <div>
+        <div style="font-weight:600">提示词中性化</div>
+        <div class="txt">改写 Codex 系统提示词里的标识语句，用于绕过按提示词指纹做渠道校验的网关。只在你被授权使用该网关时开启。</div>
+      </div>
+      <button id="btnSanitize">…</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>连接信息</h2>
+    <div class="hint" style="margin:0">
+      桥接监听：<code id="listen"></code><br>
+      Codex 的 <code>config.toml</code> 应指向 <code id="codexUrl"></code>
+    </div>
+  </div>
+</main>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <h3 id="modalTitle">添加上游</h3>
+    <div class="hint" style="margin-bottom:8px">填写兼容 OpenAI Chat Completions 的端点。</div>
+    <label>名称 *</label>
+    <input type="text" id="fName" placeholder="例如：本地网关">
+    <div class="grid2">
+      <div>
+        <label>模型名 *</label>
+        <input type="text" id="fModel" placeholder="deepseek-v4.1-flash">
+      </div>
+      <div>
+        <label>备注</label>
+        <input type="text" id="fNotes" placeholder="可选">
+      </div>
+    </div>
+    <label>API 地址 *</label>
+    <input type="text" id="fBaseUrl" placeholder="http://127.0.0.1:7863/v1">
+    <label>API Key</label>
+    <input type="password" id="fApiKey" placeholder="sk-...">
+    <div class="actions">
+      <button id="btnCancel">取消</button>
+      <button class="primary" id="btnSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let STATE = null;
+let EDITING = null;
+
+const $ = (id) => document.getElementById(id);
+
+function toast(msg, kind = "") {
+  const el = $("toast");
+  el.textContent = msg;
+  el.className = "toast show " + kind;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = "toast " + kind; }, 3200);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text }; }
+  if (!res.ok) throw new Error(data?.detail || ("HTTP " + res.status));
+  return data;
+}
+
+function render() {
+  const s = STATE;
+  const dot = $("dot"), st = $("statusText");
+  const running = s.bridge.running;
+  dot.className = "dot " + (running ? "on" : "off");
+  st.textContent = running ? "桥接运行中" : "桥接已停止";
+
+  const tc = $("targetPill");
+  if (s.active_target.model) {
+    tc.style.display = "";
+    tc.textContent = s.active_target.model + " → " + s.active_target.base_url;
+  } else {
+    tc.style.display = "none";
+  }
+
+  $("listen").textContent = s.listen.host + ":" + s.listen.port;
+  $("codexUrl").textContent = "http://" + s.listen.host + ":" + s.listen.port + "/v1";
+
+  const san = $("btnSanitize");
+  san.textContent = s.sanitize_prompt ? "已开启" : "已关闭";
+  san.className = s.sanitize_prompt ? "primary" : "";
+
+  const list = $("list");
+  if (!s.providers.length) {
+    list.innerHTML = '<div class="empty">还没有上游，点击下面添加一个。</div>';
+    return;
+  }
+  list.innerHTML = "";
+  for (const p of s.providers) {
+    const isActive = p.id === s.active;
+    const el = document.createElement("div");
+    el.className = "provider" + (isActive ? " active" : "");
+    el.innerHTML = `
+      <div class="grow">
+        <div class="name">${esc(p.name)} ${isActive ? '<span class="tag">使用中</span>' : ""}</div>
+        <div class="meta">${esc(p.model)} · ${esc(p.base_url)}</div>
+      </div>
+      <button data-act="activate" data-id="${p.id}" ${isActive ? "disabled" : ""}>
+        ${isActive ? "当前" : "切换"}
+      </button>
+      <button data-act="edit" data-id="${p.id}">编辑</button>
+      <button class="danger" data-act="del" data-id="${p.id}">删除</button>
+    `;
+    list.appendChild(el);
+  }
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+async function refresh() {
+  try {
+    STATE = await api("/api/state");
+    render();
+  } catch (e) {
+    toast("读取状态失败：" + e.message, "err");
+  }
+}
+
+function openModal(provider) {
+  EDITING = provider ? provider.id : null;
+  $("modalTitle").textContent = provider ? "编辑上游" : "添加上游";
+  $("fName").value = provider?.name || "";
+  $("fModel").value = provider?.model || "";
+  $("fNotes").value = provider?.notes || "";
+  $("fBaseUrl").value = provider?.base_url || "";
+  $("fApiKey").value = provider?.api_key || "";
+  $("modal").classList.add("show");
+  $("fName").focus();
+}
+
+function closeModal() {
+  $("modal").classList.remove("show");
+  EDITING = null;
+}
+
+$("btnAdd").onclick = () => openModal(null);
+$("btnCancel").onclick = closeModal;
+$("modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+
+$("btnSave").onclick = async () => {
+  const payload = {
+    name: $("fName").value,
+    model: $("fModel").value,
+    notes: $("fNotes").value,
+    base_url: $("fBaseUrl").value,
+    api_key: $("fApiKey").value,
+  };
+  try {
+    if (EDITING) {
+      await api("/api/providers/" + EDITING, { method: "PUT", body: JSON.stringify(payload) });
+      toast("已保存", "ok");
+    } else {
+      await api("/api/providers", { method: "POST", body: JSON.stringify(payload) });
+      toast("已添加", "ok");
+    }
+    closeModal();
+    await refresh();
+  } catch (e) {
+    toast(e.message, "err");
+  }
+};
+
+$("list").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const { act, id } = btn.dataset;
+  const p = STATE.providers.find((x) => x.id === id);
+  if (act === "edit") return openModal(p);
+  if (act === "del") {
+    if (!confirm("删除「" + p.name + "」？")) return;
+    try {
+      await api("/api/providers/" + id, { method: "DELETE" });
+      toast("已删除", "ok");
+      await refresh();
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (act === "activate") {
+    btn.disabled = true;
+    btn.textContent = "切换中…";
+    try {
+      const r = await api("/api/activate/" + id, { method: "POST" });
+      toast("已切换到 " + p.name + (r.restarted ? "，桥接已重启" : ""), "ok");
+      await refresh();
+    } catch (err) {
+      toast(err.message, "err");
+      btn.disabled = false;
+      btn.textContent = "切换";
+    }
+  }
+});
+
+$("btnSanitize").onclick = async () => {
+  try {
+    await api("/api/sanitize", {
+      method: "POST",
+      body: JSON.stringify({ enabled: !STATE.sanitize_prompt }),
+    });
+    await refresh();
+    toast("设置已更新", "ok");
+  } catch (e) { toast(e.message, "err"); }
+};
+
+$("btnRestart").onclick = async () => {
+  const b = $("btnRestart");
+  b.disabled = true; b.textContent = "重启中…";
+  try {
+    await api("/api/restart", { method: "POST" });
+    await refresh();
+    toast(STATE.bridge.running ? "桥接已启动" : "已重启，但端口未响应", STATE.bridge.running ? "ok" : "err");
+  } catch (e) { toast(e.message, "err"); }
+  finally { b.disabled = false; b.textContent = "重启桥接"; }
+};
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

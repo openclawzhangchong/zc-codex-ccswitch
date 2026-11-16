@@ -191,9 +191,35 @@ scripts/import-provider.ps1         seeds the CC Switch database (with -DryRun)
 scripts/install-bridge.ps1          api2codex bridge + prompt-rewrite patch (for 11128 gateways)
 scripts/verify.ps1                  four end-to-end checks, works against either proxy
 scripts/checksums.psd1              pinned SHA256 for every download
+bridge/config_store.py              provider list + active selection, atomic JSON writes
+bridge/webui.py                     management API (add/edit/delete/switch providers)
+bridge/webui.html                   the management page
+bridge/tray.py                      Windows tray icon: start/stop, WebUI, autostart
 docs/why-a-proxy.md                 the protocol break, explained
 docs/api2codex-bridge.md            the bridge, what the patch changes, how to run it
 ```
+
+## Bridge manager (tray + WebUI)
+
+`install-bridge.ps1` sets up the bridge; the files in `bridge/` add a way to
+manage it without touching `.env` by hand.
+
+**Tray icon** (`pythonw tray.py`) — left-click opens the WebUI, right-click for
+start / stop / restart / autostart / quit. The icon is green when the bridge is
+answering on its port. "开机自动启动" writes a single `HKCU\...\Run` entry, so
+nothing needs a scheduled task.
+
+**WebUI** on `http://127.0.0.1:8789/` — one card per upstream with the active
+one highlighted. Add, edit, delete, or switch; switching rewrites `.env` and
+restarts the bridge because api2codex reads its settings once at startup.
+
+Only one provider is active at a time. This is intentional: api2codex is
+single-upstream by design, and per-model routing would mean rewriting its
+request path. If you later need "model A goes to gateway X, model B to gateway
+Y", that is a different piece of work.
+
+The provider list lives in `config.json` next to the bridge; API keys are stored
+there in plain text, so treat that file like `.env`.
 
 ---
 
