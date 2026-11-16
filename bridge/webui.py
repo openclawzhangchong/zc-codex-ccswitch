@@ -79,14 +79,22 @@ def bridge_running() -> tuple[bool, int | None]:
     return port_open(host, port), None
 
 
+def _run_hidden(args: list[str]) -> subprocess.CompletedProcess:
+    """Run a console tool without flashing a black window.
+
+    WebUI shares the tray's process, so tasklist/taskkill probes on each status
+    poll would otherwise flicker a terminal. CREATE_NO_WINDOW suppresses it.
+    Chinese Windows emits GBK, hence errors='replace'.
+    """
+    kwargs: dict = {"capture_output": True, "text": True, "errors": "replace"}
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return subprocess.run(args, **kwargs)
+
+
 def _pid_alive(pid: int) -> bool:
     if os.name == "nt":
-        # Chinese Windows emits GBK from tasklist; decoding as UTF-8 raises and
-        # a crash here takes the whole request down.
-        out = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-            capture_output=True, text=True, errors="replace",
-        )
+        out = _run_hidden(["tasklist", "/FI", f"PID eq {pid}", "/NH"])
         return str(pid) in (out.stdout or "")
     try:
         os.kill(pid, 0)
@@ -161,7 +169,7 @@ def stop_bridge() -> bool:
     if not running:
         return False
     if pid:
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        _run_hidden(["taskkill", "/PID", str(pid), "/F"])
     BRIDGE_PIDFILE.unlink(missing_ok=True)
     time.sleep(1.5)
     return True
@@ -190,7 +198,8 @@ def start_bridge() -> int | None:
         stderr=subprocess.DEVNULL,
         creationflags=creationflags,
     )
-    BRIDGE_PIDFILE.write_text(str(proc.pid))
+    BRIDGE_PIDFILE.write_text(str(proc.pid) + "
+", encoding="utf-8")
     for _ in range(20):
         if port_open(cfg.host, cfg.port):
             return proc.pid

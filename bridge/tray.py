@@ -48,13 +48,22 @@ WEBUI_SERVER: object | None = None
 # --------------------------------------------------------------------------
 # State helpers
 # --------------------------------------------------------------------------
+def _run_hidden(args: list[str]) -> subprocess.CompletedProcess:
+    """Run a console tool without flashing a black window.
+
+    The tray watches process state every few seconds via tasklist/taskkill.
+    On Windows those are console programs: without CREATE_NO_WINDOW each call
+    pops a terminal window for an instant, which reads as a random flicker.
+    Chinese Windows also emits GBK, hence errors='replace'.
+    """
+    kwargs: dict = {"capture_output": True, "text": True, "errors": "replace"}
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return subprocess.run(args, **kwargs)
+
+
 def _pid_alive(pid: int) -> bool:
-    # Chinese Windows emits GBK from tasklist; decoding it as UTF-8 raises and
-    # a crash here takes the tray down before it can draw an icon.
-    out = subprocess.run(
-        ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-        capture_output=True, text=True, errors="replace",
-    )
+    out = _run_hidden(["tasklist", "/FI", f"PID eq {pid}", "/NH"])
     return str(pid) in (out.stdout or "")
 
 
@@ -160,7 +169,8 @@ def start_bridge() -> bool:
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
     )
-    BRIDGE_PIDFILE.write_text(str(proc.pid), encoding="utf-8")
+    BRIDGE_PIDFILE.write_text(str(proc.pid) + "
+", encoding="utf-8")
     cfg = load_config()
     host = getattr(cfg, "_data", {}).get("host", "127.0.0.1")
     port = getattr(cfg, "_data", {}).get("port", 8787)
@@ -174,20 +184,19 @@ def start_bridge() -> bool:
 def stop_bridge() -> None:
     running, pid = bridge_status()
     if running and pid:
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        _run_hidden(["taskkill", "/PID", str(pid), "/F"])
     else:
         # No pidfile: find the process by its command line rather than killing
         # every python on the machine.
-        out = subprocess.run(
+        out = _run_hidden(
             ["wmic", "process", "where",
              "name like '%python%' and commandline like '%api2codex%'",
-             "get", "processid", "/format:value"],
-            capture_output=True, text=True,
+             "get", "processid", "/format:value"]
         )
         for line in out.stdout.splitlines():
             line = line.strip()
             if line.isdigit():
-                subprocess.run(["taskkill", "/PID", line, "/F"], capture_output=True)
+                _run_hidden(["taskkill", "/PID", line, "/F"])
     BRIDGE_PIDFILE.unlink(missing_ok=True)
     time.sleep(1.0)
 
