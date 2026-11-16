@@ -1,0 +1,13 @@
+{
+  "default": {
+    "base_url": "http://127.0.0.1:7863/v1",
+    "api_key": "sk-your-default-key"
+  },
+  "routes": [
+    {
+      "prefix": "7864-",
+      "base_url": "http://127.0.0.1:7864/v1",
+      "api_key": "sk-other-gateway-key"
+    }
+  ]
+}
