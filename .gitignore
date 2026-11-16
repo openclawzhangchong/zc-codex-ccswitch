@@ -1,0 +1,10 @@
+# scratch
+_downloads/
+_tools/
+*.log
+*.part
+*.bak-*
+
+# Windows
+Thumbs.db
+desktop.ini
