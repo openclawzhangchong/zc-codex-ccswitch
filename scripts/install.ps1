@@ -59,9 +59,10 @@ function Get-RemoteFile([string]$Url, [string]$Destination) {
     $partial = "$Destination.part"
     if (Test-Path $partial) { Remove-Item $partial -Force }
     # curl.exe ships with Windows 10 1803+ and is much faster/more reliable than
-    # Invoke-WebRequest for large GitHub release assets.
+    # Invoke-WebRequest for large GitHub release assets. -sS keeps errors visible
+    # while suppressing the progress meter.
     if (Test-CommandExists 'curl.exe') {
-        & curl.exe -fL --retry 3 --retry-delay 2 -o $partial $Url
+        & curl.exe -fsSL --retry 3 --retry-delay 2 -o $partial $Url
         if ($LASTEXITCODE -ne 0) { throw "curl failed with exit code $LASTEXITCODE for $Url" }
     } else {
         Invoke-WebRequest -Uri $Url -OutFile $partial -UseBasicParsing
@@ -275,15 +276,21 @@ if (-not (Test-Path $templatePath)) {
 # Done
 # --------------------------------------------------------------------------
 Write-Step "Finished"
-Write-Host @"
-    Codex CLI    : $(if (Test-CommandExists 'codex') { (& codex --version) } else { 'not installed' })
-    CC GUI       : $ccGuiExe
-    CC Switch    : $ccSwitchExe
-    Codex config : $targetConfig
 
-    Next steps:
-      1. Launch CC Switch:  $ccSwitchExe
-      2. Codex tab -> Routing -> Start routing
-      3. Setting 'Upstream format' must be 'Chat Completions' for chat-only gateways
-      4. Launch CC GUI:     $ccGuiExe
-"@ -ForegroundColor Gray
+$codexSummary = 'not installed'
+if (Test-CommandExists 'codex') {
+    try { $codexSummary = (& codex --version) 2>&1 } catch { $codexSummary = 'installed (version unknown)' }
+}
+
+Write-Host ""
+Write-Host "    Codex CLI    : $codexSummary"
+Write-Host "    CC GUI       : $ccGuiExe"
+Write-Host "    CC Switch    : $ccSwitchExe"
+Write-Host "    Codex config : $targetConfig"
+Write-Host ""
+Write-Host "    Next steps:" -ForegroundColor Gray
+Write-Host "      1. Launch CC Switch:  $ccSwitchExe" -ForegroundColor Gray
+Write-Host "      2. Codex tab -> Routing -> Start routing" -ForegroundColor Gray
+Write-Host "      3. Provider -> Advanced options -> Upstream format -> Chat Completions" -ForegroundColor Gray
+Write-Host "      4. Launch CC GUI:     $ccGuiExe" -ForegroundColor Gray
+Write-Host ""

@@ -69,7 +69,7 @@ function Get-SqliteExe {
     $url = "https://www.sqlite.org/2026/$($match.Value)"
     Write-Info "downloading $($match.Value)"
     if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        & curl.exe -fL --retry 3 -o $zip $url
+        & curl.exe -fsSL --retry 3 -o $zip $url
         if ($LASTEXITCODE -ne 0) { throw "download failed (exit $LASTEXITCODE)" }
     } else {
         Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
