@@ -111,6 +111,51 @@ def write_env(cfg: ConfigStore) -> None:
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="ascii", errors="replace")
 
 
+CODEX_HOME = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+CODEX_CONFIG = CODEX_HOME / "config.toml"
+
+
+def write_codex_config(cfg: ConfigStore) -> str | None:
+    """Keep Codex's model in step with the active provider.
+
+    Codex sends `model` in every request, so if config.toml still names the
+    previous provider's model the bridge would forward a model the new upstream
+    has never heard of. Rewrites only the `model` line, leaving every other
+    setting the user has touched alone.
+    """
+    active = cfg.active()
+    if active is None:
+        return None
+    model = active["model"]
+    try:
+        CODEX_HOME.mkdir(parents=True, exist_ok=True)
+        if CODEX_CONFIG.exists():
+            text = CODEX_CONFIG.read_text(encoding="utf-8")
+            import re
+            if re.search(r"^model\s*=", text, flags=re.M):
+                text = re.sub(r'^model\s*=\s*".*?"', f'model = "{model}"',
+                              text, count=1, flags=re.M)
+            else:
+                text = f'model = "{model}"\n' + text
+        else:
+            text = (
+                f'model = "{model}"\n'
+                f'model_reasoning_effort = "high"\n'
+                f'model_provider = "bridge"\n\n'
+                f'[model_providers.bridge]\n'
+                f'name = "api2codex bridge"\n'
+                f'base_url = "http://127.0.0.1:{cfg.port}/v1"\n'
+                f'wire_api = "responses"\n'
+            )
+        # No BOM: Codex's TOML loader rejects a leading U+FEFF.
+        CODEX_CONFIG.write_text(text, encoding="utf-8", newline="\n")
+        return model
+    except OSError:
+        # A locked or unwritable config must not fail the switch - the bridge
+        # itself is already updated, and the user can fix the file by hand.
+        return None
+
+
 def stop_bridge() -> bool:
     running, pid = bridge_running()
     if not running:
@@ -193,6 +238,13 @@ async def edit_provider(provider_id: str, request: Request) -> JSONResponse:
         updated = cfg.update(provider_id, payload)
     except ConfigError as exc:
         raise HTTPException(400, str(exc)) from exc
+    # Editing the active provider's model or URL must reach the bridge too.
+    if cfg.active_id == provider_id:
+        write_env(cfg)
+        write_codex_config(cfg)
+        if bridge_running()[0]:
+            stop_bridge()
+            start_bridge()
     return JSONResponse(updated)
 
 
@@ -212,6 +264,7 @@ def activate(provider_id: str) -> JSONResponse:
     try:
         cfg.activate(provider_id)
         write_env(cfg)
+        synced_model = write_codex_config(cfg)
     except (ConfigError, HTTPException) as exc:
         raise HTTPException(400, str(exc)) from exc
     # A running bridge reads .env only at startup, so a switch needs a restart.
@@ -220,7 +273,11 @@ def activate(provider_id: str) -> JSONResponse:
         stop_bridge()
         start_bridge()
         restarted = True
-    return JSONResponse({"active": provider_id, "restarted": restarted})
+    return JSONResponse({
+        "active": provider_id,
+        "restarted": restarted,
+        "model": synced_model,
+    })
 
 
 @app.post("/api/sanitize")
