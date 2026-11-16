@@ -169,8 +169,7 @@ def start_bridge() -> bool:
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
     )
-    BRIDGE_PIDFILE.write_text(str(proc.pid) + "
-", encoding="utf-8")
+    BRIDGE_PIDFILE.write_text(str(proc.pid) + "\n", encoding="utf-8")
     cfg = load_config()
     host = getattr(cfg, "_data", {}).get("host", "127.0.0.1")
     port = getattr(cfg, "_data", {}).get("port", 8787)

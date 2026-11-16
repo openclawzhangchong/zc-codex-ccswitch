@@ -198,8 +198,7 @@ def start_bridge() -> int | None:
         stderr=subprocess.DEVNULL,
         creationflags=creationflags,
     )
-    BRIDGE_PIDFILE.write_text(str(proc.pid) + "
-", encoding="utf-8")
+    BRIDGE_PIDFILE.write_text(str(proc.pid) + "\n", encoding="utf-8")
     for _ in range(20):
         if port_open(cfg.host, cfg.port):
             return proc.pid

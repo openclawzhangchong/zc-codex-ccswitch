@@ -1,234 +1,179 @@
 # zc-codex-ccswitch
 
-Install a ZCode-like desktop client for **OpenAI Codex** on a fresh Windows machine, pointed at your own OpenAI-compatible gateway.
+> 📖 **文档网站**：<https://openclawzhangchong.github.io/zc-codex-ccswitch/>
+> 📦 **代码仓库**：<https://github.com/openclawzhangchong/zc-codex-ccswitch>
 
-One command on a new PC gets you: **Codex CLI + CC GUI desktop app + CC Switch**, already wired together.
+在一台全新的 Windows 电脑上，一条命令装好 **Codex CLI + CC GUI 桌面端 + CC Switch**，并打通自建网关。
 
 ```
-CC GUI (desktop app)  ->  Codex CLI  ->  CC Switch local proxy (:15721)  ->  your gateway
-                                          Responses <-> Chat Completions
+CC GUI 桌面端  →  Codex CLI  →  api2codex 桥接 (:8787)  →  你的网关 (:7863)
+                                Responses ↔ Chat 转换 + 提示词中性化
 ```
 
-> **Read this before you start.** This repo solves the *protocol* problem (Codex only speaks Responses; chat-only gateways 404). It does **not** solve *gateway policy* problems. If your gateway enforces "official client only" channel checks (`11128 Illegal API invocation from an unapproved channel`), the chain will work intermittently and then start failing — see [Channel verification](#channel-verification-11128). Tested against a gateway that enforces this, plain proxied requests succeed while full Codex requests get blocked and then cool down the upstream account.
+---
+
+## 为什么需要这个项目
+
+Codex 0.169 **移除了 `wire_api = "chat"`**，只支持 Responses API。但大多数自建网关只提供 `/v1/chat/completions`，导致 Codex 直接报 404。
+
+更麻烦的是，有些网关会按 Codex 系统提示词做渠道校验，不匹配就返回 `11128 Illegal API invocation from an unapproved channel`，随后账号进入冷却（503）。
+
+CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了渠道校验。所以本项目采用 **api2codex + 提示词中性化补丁** 的方案。
+
+> 详细原理见 [`docs/why-a-proxy.md`](docs/why-a-proxy.md) 和 [`docs/api2codex-bridge.md`](docs/api2codex-bridge.md)。
 
 ---
 
-## Why this exists
+## 三种网关对应的方案
 
-Codex 0.169 **removed** `wire_api = "chat"`. It only speaks the Responses API now. Most self-hosted and third-party OpenAI-compatible gateways only expose `/v1/chat/completions`, so Codex gets a `404` on `/v1/responses` and cannot talk to them at all.
-
-CC Switch's **Routing** mode sits in the middle and translates between the two. That translation is not on by default — you have to set the provider's **Upstream format** to `Chat Completions`. Missing that one setting is the cause of the `404` this repo exists to prevent.
-
----
-
-## What gets installed
-
-| Component | Version | Why |
-| --- | --- | --- |
-| [Codex CLI](https://github.com/openai/codex) | `0.169.0` | The agent engine, installed via npm |
-| [CC GUI (desktop-cc-gui)](https://github.com/zhukunpenglinyutong/desktop-cc-gui) | `1.2.4` | The desktop window you actually type in |
-| [CC Switch](https://github.com/farion1231/cc-switch) | `4.0.32` | Local proxy + provider management |
-
-Portable: nothing lands in `Program Files` and nothing is registered as an installed application. Everything lives under `%LOCALAPPDATA%\zc-codex-ccswitch\` and is removed by deleting that folder.
+| 你的网关 | 应该用什么 |
+|---|---|
+| 原生支持 `/v1/responses` | 只装 Codex CLI + CC GUI，`base_url` 直接指过去，无需代理 |
+| 只有 Chat Completions，**不**校验渠道 | `install.ps1` + CC Switch 路由（Upstream format 设为 Chat Completions） |
+| 只有 Chat Completions，**会**校验渠道（`11128`） | `install-bridge.ps1`（本项目推荐的完整方案） |
 
 ---
 
-## Which setup do you need?
+## 环境要求
 
-| Your gateway | Use |
-| --- | --- |
-| Serves `/v1/responses` natively | Codex + CC GUI only. Point `base_url` straight at it, no proxy. |
-| Chat Completions only, **no** channel fingerprinting | `install.ps1` + CC Switch routing with `Upstream format: Chat Completions`. |
-| Chat Completions only, **and** rejects non-official clients (`11128`) | `install-bridge.ps1` — same translation, plus an opt-in prompt rewrite. |
-
----
-
-## Requirements
-
-- **Windows 10 1803+ / Windows 11** (x64)
-- **Node.js 22 or newer** — only needed for the Codex CLI, not for the desktop apps.
-  Download: <https://nodejs.org/>
-- A gateway that speaks **OpenAI Chat Completions** (`/v1/chat/completions`), with its base URL, API key and a model name.
+- Windows 10 1803+ / Windows 11（x64）
+- Node.js 22+（仅 Codex CLI 需要）：<https://nodejs.org/>
+- 若要装桥接：Python 3.10+：<https://www.python.org/>
+- 一个 OpenAI 兼容网关（地址、API Key、模型名）
 
 ---
 
-## Quick start
+## 快速开始
 
-Open a normal (non-elevated) PowerShell in the repo root:
+在仓库根目录打开 PowerShell：
 
 ```powershell
-# 1. Install everything
+# 1. 安装全部组件
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 
-# 2. Seed the Codex provider inside CC Switch, with Upstream format already
-#    set to "Chat Completions". Run this with CC Switch CLOSED.
-powershell -ExecutionPolicy Bypass -File .\scripts\import-provider.ps1 `
-    -BaseUrl http://127.0.0.1:7863/v1 `
-    -ApiKey  sk-your-key `
-    -Model   deepseek-v4.1-flash
+# 2. 安装桥接（带提示词中性化，应对 11128 渠道校验）
+powershell -ExecutionPolicy Bypass -File .\scripts\install-bridge.ps1 `
+    -BaseUrl http://127.0.0.1:7863/v1 -ApiKey sk-xxx `
+    -Model deepseek-v4.1-flash -Start
 
-# 3. Start CC Switch, open the Codex tab, click "Start routing"
-#    (or -DryRun first to see what will be written)
-
-# 4. Prove the chain works
-powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Model deepseek-v4.1-flash
+# 3. 完整验收测试
+powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
 ```
 
-`verify.ps1` runs four checks and exits non-zero if any fail:
-
-1. Codex CLI on PATH
-2. Something listening on `127.0.0.1:15721`
-3. The proxy answers a real Responses request
-4. `codex exec` returns the expected token end to end
+`install-bridge.ps1` 会：克隆 api2codex（MIT）→ 精确锚点打补丁（上游变化会报错）→ 建虚拟环境 → 写 `.env` → 生成 `start-bridge.cmd` → 改写 `~/.codex/config.toml` → 可选启动。
 
 ---
 
-## Doing it by hand (no scripts)
+## 桌面端与管理界面
 
-If you would rather click through the UI, that is fine — the result is identical.
+### 托盘图标
 
-**a. Install the three pieces**
+运行 `bridge/tray.py`（`pythonw` 无控制台）。绿点代表桥接运行中，灰点代表停止。
+
+- **左键**：打开管理界面
+- **右键菜单**：启动 / 停止 / 重启桥接、开机自动启动、退出
+
+托盘启动时会自动拉起桥接和 WebUI，所以开机自启只需在菜单勾选一次（写一条 `HKCU\...\Run`）。托盘从任意工作目录都能启动，PID 文件会如实记录桥接进程。
+
+### Web 管理界面
+
+浏览器打开 <http://127.0.0.1:8789/>：
+
+- 每个上游一张卡片，当前使用的会高亮
+- 添加 / 编辑 / 删除 / 切换上游
+- 提示词中性化开关
+- 连接信息
+
+切换上游会重写 `.env` 和 `~/.codex/config.toml`，并重启桥接。
+
+> 注意：api2codex 只在启动时读配置，所以切换需要重启。当前是「单点切换」，因为桥接会把请求里的 `model` 原样转发——**同一网关的多个模型其实可以同时使用**，用 `-m` 或 `/model` 切换即可，不必改配置。
+
+---
+
+## 模型切换
 
 ```powershell
-npm install -g @openai/codex@0.169.0
+# 方式 1：CLI 临时指定（不改任何配置）
+codex exec -m hy4flash-free "问题"
+codex exec -m deepseek-v4.1-flash "问题"
+
+# 方式 2：WebUI 点「切换」
+# 方式 3：改 ~/.codex/config.toml 的 model 行
 ```
 
-Then download and run:
-- CC GUI: <https://github.com/zhukunpenglinyutong/desktop-cc-gui/releases> → `CC.GUI_1.2.4_x64-setup.exe`
-- CC Switch: <https://github.com/farion1231/cc-switch/releases> → `CC-Switch-v4.0.32-Windows-Portable.zip` (extract, keep `portable.ini` next to the exe)
-
-**b. Add the provider in CC Switch**
-
-Codex tab → `Add provider` → `Custom configuration`:
-
-| Field | Value |
-| --- | --- |
-| Name | anything, e.g. `Local Gateway` |
-| API key | your gateway key |
-| API request URL | your gateway base URL, e.g. `http://127.0.0.1:7863/v1` |
-| Model | your model name, e.g. `deepseek-v4.1-flash` |
-
-**The step people miss:** open **Advanced options** and set
-
-> **Upstream format → `Chat Completions (translated)`**
-
-Then **Save**, switch to the **Routing** tab and click **Start routing**.
-
-**c. Point Codex at the proxy**
-
-CC Switch writes `~/.codex/config.toml` itself when it takes over. If you need to do it manually:
-
-```toml
-model = "deepseek-v4.1-flash"
-model_reasoning_effort = "high"
-model_provider = "ccswitch"
-
-[model_providers.ccswitch]
-name = "CC Switch Local Proxy"
-base_url = "http://127.0.0.1:15721/v1"
-wire_api = "responses"
-requires_openai_auth = false
-experimental_bearer_token = "PROXY_MANAGED"
-```
+两个模型共用同一个网关地址和 Key，所以桥接层无需改动。
 
 ---
 
-## Troubleshooting
+## 测试脚本
+
+全部脚本在 `test/` 目录，**已在本机实测通过**。
+
+| 脚本 | 作用 |
+|---|---|
+| `test-bridge.ps1` | 桥接健康检查：`/health`、`/v1/models`、`/v1/responses` |
+| `test-tray.ps1` | 托盘与自启：从 `C:\` 启动、PID 一致性、WebUI 重启 |
+| `test-no-flicker.ps1` | 黑窗闪烁采样检测 |
+| `test-e2e.ps1` | 全链路端到端：CLI + 桥接 + 工具调用 + WebUI |
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1  -Model hy4flash-free
+powershell -ExecutionPolicy Bypass -File .\test\test-no-flicker.ps1 -Seconds 10
+powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
+```
+
+> 脚本输出刻意使用 ASCII：Windows PowerShell 5.1 把无 BOM 的 `.ps1` 当 GBK 读取，中文输出字符串会导致解析错误。中文说明都放在文档里。
+
+---
+
+## 常见问题
 
 ### `404 ... /v1/responses`
+provider 的「上游格式」还是 `Responses (原生)`。改成 `Chat Completions (translated)`。
 
-The provider's **Upstream format** is still `Responses (native)`, so CC Switch forwarded the request untranslated to a gateway that has no `/v1/responses` endpoint.
+### `11128 Illegal API invocation from an unapproved channel`
+网关按提示词指纹拦截非官方客户端。CC Switch 过不了这关，用带提示词中性化的 api2codex 桥接。请确认你有授权使用该网关。
 
-Fix: provider card → edit → **Advanced options** → **Upstream format** → `Chat Completions (translated)` → Save.
+### `wire_api = "chat" is no longer supported`
+Codex 0.169 已移除该选项，不要试图设置，改用 Responses + 协议转换。
 
-### Channel verification (`11128`)
+### 出现周期性黑窗
+检查 `_run_hidden()` 是否对 `tasklist`/`taskkill`/`wmic` 传了 `CREATE_NO_WINDOW`。用 `test-no-flicker.ps1` 验证。
 
-Your gateway fingerprints the request and only accepts what it considers an official client. Observed behaviour during testing:
+### 旧会话报 provider "custom" 不存在
+会话绑定创建时的 provider。新建会话即可，旧会话按设计保留。
 
-| Request | Result |
-| --- | --- |
-| `curl` → proxy → gateway (short prompt) | 200 |
-| `codex exec` → proxy → gateway | `11128` on the first attempt |
-| immediately afterwards | upstream account enters cooldown → `503` |
-| after ~1 minute | plain `curl` works again |
-
-The trigger is the Codex system prompt, specifically the opening line `You are a coding agent running in the Codex CLI...`. Sending the same request with that sentence reworded returned 200.
-
-**Setting `Upstream format: Chat Completions` does not defeat this check.** It only fixes the protocol mismatch. A translated request still carries the identifying prompt.
-
-Options, in order of honesty:
-
-1. **Ask the gateway operator to allow the channel.** This control is intentional; working around it may violate the terms you agreed to.
-2. **Use a relay that does not enforce it.**
-3. **Run a shim that rewrites the identifying text** — only if you have authorisation to bypass that control on that gateway. This repo does not ship one.
-
-If none of these is available, no proxy configuration will make that gateway work reliably with Codex CLI.
-
-### Codex says `wire_api = "chat" is no longer supported`
-
-Codex 0.169 dropped the chat wire protocol. Do not try to set it — leave `wire_api = "responses"` and let CC Switch do the translation instead.
-
-### CC Switch keeps writing the config back
-
-CC Switch owns `~/.codex/config.toml` while routing is active. Quit it through the tray icon rather than killing the process, otherwise the config is left pointing at a proxy that is no longer running. If that happens, CC GUI reports `provider "custom" is no longer configured` on old sessions — start a **new** chat.
-
-### Old chats fail after switching providers
-
-Sessions are bound to the provider they were created with. Create a new chat; the old ones stay broken by design.
-
-### `codex exec` hangs at `Reading additional input from stdin...`
-
-It waits for EOF on stdin when it detects a pipe. Redirect stdin from an empty file, or run it from a real terminal.
+更多问题见 [`docs/经验总结.md`](docs/经验总结.md)。
 
 ---
 
-## Layout
+## 目录结构
 
 ```
-config/codex-config.toml.template   reference config.toml, with the direct-connection alternative
-scripts/install.ps1                 downloads + installs Codex CLI, CC GUI, CC Switch
-scripts/import-provider.ps1         seeds the CC Switch database (with -DryRun)
-scripts/install-bridge.ps1          api2codex bridge + prompt-rewrite patch (for 11128 gateways)
-scripts/verify.ps1                  four end-to-end checks, works against either proxy
-scripts/checksums.psd1              pinned SHA256 for every download
-bridge/config_store.py              provider list + active selection, atomic JSON writes
-bridge/webui.py                     management API (add/edit/delete/switch providers)
-bridge/webui.html                   the management page
-bridge/tray.py                      Windows tray icon: start/stop, WebUI, autostart
-docs/why-a-proxy.md                 the protocol break, explained
-docs/api2codex-bridge.md            the bridge, what the patch changes, how to run it
+CHANGELOG.md                    更新日志
+README.md                       本文档
+config/codex-config.toml.template  Codex 配置模板
+scripts/install.ps1             一键安装三个组件
+scripts/import-provider.ps1     写入 CC Switch 数据库
+scripts/install-bridge.ps1      api2codex 桥接 + 补丁
+scripts/verify.ps1              四步验证
+scripts/checksums.psd1          下载文件校验值
+bridge/config_store.py          供应商配置（JSON 原子写）
+bridge/webui.py                 管理 API
+bridge/webui.html               管理页面
+bridge/tray.py                  Windows 托盘
+test/*.ps1                      四个测试脚本
+docs/why-a-proxy.md             协议断层原理
+docs/api2codex-bridge.md        桥接方案与补丁
+docs/经验总结.md                踩坑与经验
 ```
-
-## Bridge manager (tray + WebUI)
-
-`install-bridge.ps1` sets up the bridge; the files in `bridge/` add a way to
-manage it without touching `.env` by hand.
-
-**Tray icon** (`pythonw tray.py`) — left-click opens the WebUI, right-click for
-start / stop / restart / autostart / quit. The icon is green when the bridge is
-answering on its port. "开机自动启动" writes a single `HKCU\...\Run` entry, so
-nothing needs a scheduled task.
-
-**WebUI** on `http://127.0.0.1:8789/` — one card per upstream with the active
-one highlighted. Add, edit, delete, or switch; switching rewrites `.env` and
-restarts the bridge because api2codex reads its settings once at startup.
-
-Only one provider is active at a time. This is intentional: api2codex is
-single-upstream by design, and per-model routing would mean rewriting its
-request path. If you later need "model A goes to gateway X, model B to gateway
-Y", that is a different piece of work.
-
-The provider list lives in `config.json` next to the bridge; API keys are stored
-there in plain text, so treat that file like `.env`.
 
 ---
 
-## Pinned versions and checksums
+## 校验与版本
 
-`scripts/checksums.psd1` pins a SHA256 for every downloaded file, and `install.ps1` refuses to run an installer that does not match. When bumping a version, update both the URL table in `install.ps1` and the hash in `checksums.psd1`:
+`scripts/checksums.psd1` 为每个下载文件固定 SHA256，安装时强制校验。npm 包用精确版本号（`@openai/codex@0.169.0`），由 npm 注册表保证完整性。
 
-```powershell
-Get-FileHash <downloaded-file> -Algorithm SHA256
-```
+当前版本：Codex CLI `0.169.0` / CC GUI `1.2.4` / CC Switch `4.0.32` / api2codex（MIT，latest）。
 
-npm packages are pinned by exact version (`@openai/codex@0.169.0`), which npm verifies against its own registry integrity data.
+许可证见 [LICENSE](LICENSE)。
