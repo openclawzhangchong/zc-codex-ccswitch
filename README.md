@@ -1,5 +1,10 @@
 # zc-codex-ccswitch
 
+> 🎉 **重大发现（2026-11-16）**：官方 **ChatGPT 桌面 App（包名 `OpenAI.Codex`）原生读取同一份
+> `~/.codex/config.toml`** —— 我们的桥接 `127.0.0.1:8787` 被官方 App 直接使用，非官方模型
+> `hy4flash-free` 对话成功，历史会话三端共享（CLI / CC GUI / 官方 App）。详见
+> [`docs/官方桌面App.md`](docs/官方桌面App.md)。
+
 > 📖 **文档网站**：<https://openclawzhangchong.github.io/zc-codex-ccswitch/>
 > 📦 **代码仓库**：<https://github.com/openclawzhangchong/zc-codex-ccswitch>
 
@@ -33,6 +38,27 @@ CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了
 | 只有 Chat Completions，**会**校验渠道（`11128`） | `install-bridge.ps1`（本项目推荐的完整方案） |
 
 ---
+
+
+---
+
+## 🖥️ 官方桌面 App 已验证可用
+
+`codex app` 会打开 Microsoft Store 安装器（Store 显示名 **ChatGPT**，实际包名
+**`OpenAI.Codex`**，当前版本 26.1111.2228.0，自动下载约 1GB，无需交互确认）。
+
+安装后官方 App **直接使用本项目的桥接**：
+
+- 左下角 provider 显示 `Bridge (api2codex)`（即 config.toml 里的 name）
+- 默认模型 `hy4flash-free`（config.toml 的 model）对话成功
+- 历史会话与 CLI / CC GUI 完全共享（同一 `~/.codex` 会话存储）
+- 模型目录走 `model_catalog_json`（29 个模型：7863 原名 + 7864 前缀）
+
+**已知限制**：App 内 ChatGPT 侧的 *Computer use*（驱动本机应用）显示
+`Disabled by your organization or unavailable in your region` —— 这是 OpenAI
+云端功能的区域/账号限制，与桥接无关；Codex 本地功能不受影响。
+
+启动方式：安装后运行 `codex app`，或从开始菜单启动 ChatGPT/Codex。
 
 ## 环境要求
 

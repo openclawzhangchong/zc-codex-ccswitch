@@ -4,6 +4,30 @@
 
 ## 2026-11-16
 
+## 2026-11-16
+
+### 🎉 重大突破：官方 ChatGPT/Codex 桌面 App 原生兼容桥接
+
+- `codex app` 触发 Microsoft Store 安装器，自动下载约 1GB 完成安装（包名
+  `OpenAI.Codex`，Store 显示名 ChatGPT，版本 26.1111.2228.0），全程无需交互确认
+- 安装后官方 App **直接读取同一份 `~/.codex/config.toml`**，桥接 `127.0.0.1:8787`
+  被原生使用：provider 显示 `Bridge (api2codex)`，模型 `hy4flash-free` 对话成功
+- 历史会话三端共享（CLI / CC GUI / 官方 App），因为会话存储都在 `~/.codex`
+- 官方 App 不需要 CC GUI 也能获得完整桌面体验 —— 桥接成为"官方客户端适配器"
+- 已知限制：App 内 ChatGPT 的 *Computer use* 功能被区域/账号限制
+  （`Disabled by your organization or unavailable in your region`），与桥接无关
+- 新增 `test/test-desktop-app.ps1` 检测官方 App 安装与桥接兼容性
+
+### 多上游路由：两个网关的全部模型可在 CC GUI/官方 App 自选
+
+- api2codex 升级为多上游路由：读 `routes.json`，默认上游 + 前缀路由
+- 模型名带 `7864-` 前缀 → 转发 7864 网关并去前缀；其余走 7863
+- `/v1/models` 合并全部上游（35s 超时，7864 响应约 20 秒），模型目录扩至 29 个
+- 7864 网关探测结论：**无 11128 渠道指纹校验**（带 Codex 提示词直接 200），
+  比本地网关 7863 更省心
+- 新增 `bridge/routes.json.example` 路由表格式示例
+
+
 ### 运行时文件迁移到 D 盘
 
 - 所有运行时文件统一到 `D:\zc-codex-ccswitch\`：
