@@ -4,6 +4,16 @@
 
 ## 2026-11-16
 
+### 运行时文件迁移到 D 盘
+
+- 所有运行时文件统一到 `D:\zc-codex-ccswitch\`：
+  - `cc-gui\` 桌面端、`cc-switch\` 供应商管理、`bridge\` 桥接 + 托盘 + 配置
+- 开机自启注册表项 `CodexBridgeTray` 改为指向 D 盘托盘
+- 桌面与开始菜单的 CC GUI 快捷方式改为指向 D 盘（开始菜单原是失效链接，一并修复）
+- `config.json`、`.env`、用户配置在迁移前备份到 `D:\zc-codex-ccswitch\_backup-from-c\`
+- 清理 C 盘 4 处旧运行时副本（约 300M），保留 git 源码仓库
+- 从 D 盘启动、模拟开机、删除旧副本后均验证通过（对话返回 `DRIVE_OK` / `AFTER_DELETE`）
+
 ### 测试脚本、中文文档、仓库整理
 
 - 新增 `test/` 目录，四个可直接运行的测试脚本：
