@@ -170,6 +170,26 @@ docs/经验总结.md                踩坑与经验
 
 ---
 
+## 本机实际安装位置
+
+当前这台机器的运行时文件统一放在 **D 盘**：
+
+```
+D:\zc-codex-ccswitch\
+  ├─ cc-gui\          桌面端（ccgui-next.exe）
+  ├─ cc-switch\       供应商管理（cc-switch.exe + portable.ini）
+  └─ bridge\          桥接 + 托盘 + config.json + .env + .venv
+```
+
+- 桌面与开始菜单的「CC GUI」快捷方式指向 `D:\zc-codex-ccswitch\cc-gui\ccgui-next.exe`
+- 开机自启注册表项 `CodexBridgeTray` 指向 `D:\zc-codex-ccswitch\bridge\tray.py`
+- 配置和数据仍在用户目录：`~/.codex/`、`~/.cc-switch/`、`~/.ccgui-next/`
+- `D:\zc-codex-ccswitch\_backup-from-c\` 保留了从 C 盘迁移前的配置备份
+
+> 迁移时若手动启动托盘，不要用 `Start-Process -WindowStyle Hidden`——这会让 pystray 进程退出。注册表 Run 项本身不带此参数，开机自启正常。
+
+---
+
 ## 校验与版本
 
 `scripts/checksums.psd1` 为每个下载文件固定 SHA256，安装时强制校验。npm 包用精确版本号（`@openai/codex@0.169.0`），由 npm 注册表保证完整性。

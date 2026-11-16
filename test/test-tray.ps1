@@ -9,7 +9,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$TrayDir = 'C:\Users\Administrator\.zcode\workspace\draft-c9b55466-d599-41e8-a0f9-1e2e853b591d\_bridge\api2codex',
+    [string]$TrayDir = 'D:\zc-codex-ccswitch\bridge',
     [string]$Pythonw = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python312\pythonw.exe',
     [int]$WaitSec = 25
 )
