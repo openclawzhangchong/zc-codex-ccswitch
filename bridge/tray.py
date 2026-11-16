@@ -18,25 +18,31 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import webbrowser
 from pathlib import Path
 
-import pystray
-from PIL import Image, ImageDraw, ImageFont
-
 BASE = Path(__file__).resolve().parent
+os.chdir(BASE)
 sys.path.insert(0, str(BASE))
 
+import pystray
+import uvicorn
+from PIL import Image, ImageDraw
+
 from config_store import ConfigStore  # noqa: E402
+import webui  # noqa: E402
 
 CONFIG_PATH = BASE / "config.json"
 BRIDGE_PIDFILE = BASE / ".bridge.pid"
-WEBUI_PIDFILE = BASE / ".webui.pid"
 ENV_PATH = BASE / ".env"
 LAUNCHER = BASE / "start-bridge.cmd"
 WEBUI_PORT = 8789
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "CodexBridgeTray"
+ERROR_LOG = BASE / "tray-error.log"
+WEBUI_LOG = BASE / "webui-tray.log"
+WEBUI_SERVER: object | None = None
 
 
 # --------------------------------------------------------------------------
@@ -87,41 +93,42 @@ def bridge_status() -> tuple[bool, int | None]:
 
 
 def webui_status() -> tuple[bool, int | None]:
-    if WEBUI_PIDFILE.exists():
-        try:
-            pid = int(WEBUI_PIDFILE.read_text().strip())
-        except ValueError:
-            pid = None
-        if pid and _pid_alive(pid):
-            return True, pid
     return _port_open("127.0.0.1", WEBUI_PORT), None
 
 
 # --------------------------------------------------------------------------
 # Actions
 # --------------------------------------------------------------------------
-def _spawn(args: list[str], pidfile: Path, cwd: Path) -> int:
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    exe = pythonw if pythonw.exists() else Path(sys.executable)
-    flags = 0
-    if os.name == "nt":
-        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    proc = subprocess.Popen(
-        [str(exe)] + args, cwd=str(cwd),
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        creationflags=flags,
-    )
-    pidfile.write_text(str(proc.pid))
-    return proc.pid
+
+def _bridge_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                env[key.strip()] = value.strip()
+    return env
 
 
 def start_webui() -> bool:
-    running, _ = webui_status()
-    if running:
+    global WEBUI_SERVER
+    if webui_status()[0]:
         return True
     try:
-        _spawn(["webui.py", "--port", str(WEBUI_PORT)], WEBUI_PIDFILE, BASE)
+        webui.STORE = ConfigStore(CONFIG_PATH)
+        config = uvicorn.Config(
+            webui.app, host="127.0.0.1", port=WEBUI_PORT,
+            log_level="warning", access_log=False, log_config=None,
+        )
+        server = uvicorn.Server(config)
+        server.install_signal_handlers = lambda: None
+        WEBUI_SERVER = server
+        threading.Thread(
+            target=server.run, name="webui-server", daemon=True,
+        ).start()
     except Exception:
+        with WEBUI_LOG.open("a", encoding="utf-8") as log:
+            traceback.print_exc(file=log)
         return False
     for _ in range(20):
         if _port_open("127.0.0.1", WEBUI_PORT):
@@ -131,25 +138,29 @@ def start_webui() -> bool:
 
 
 def stop_webui() -> None:
-    running, pid = webui_status()
-    if running and pid:
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
-    WEBUI_PIDFILE.unlink(missing_ok=True)
+    global WEBUI_SERVER
+    server = WEBUI_SERVER
+    WEBUI_SERVER = None
+    if server is not None:
+        server.should_exit = True
+        server.force_exit = True
 
 
 def start_bridge() -> bool:
     running, _ = bridge_status()
     if running:
         return True
-    if not LAUNCHER.exists():
-        return False
-    # The launcher reads .env into the environment; api2codex itself does not
-    # parse .env, so going through it matters.
-    subprocess.Popen(
-        ["cmd", "/c", str(LAUNCHER)],
-        cwd=str(BASE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    exe = pythonw if pythonw.exists() else Path(sys.executable)
+    # api2codex reads .env only from os.environ, so pass it explicitly instead
+    # of spawning cmd.exe just to load a .cmd file (that caused flash windows).
+    proc = subprocess.Popen(
+        [str(exe), str(BASE / "api2codex.py")],
+        cwd=str(BASE), env=_bridge_env(),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
     )
+    BRIDGE_PIDFILE.write_text(str(proc.pid), encoding="utf-8")
     cfg = load_config()
     host = getattr(cfg, "_data", {}).get("host", "127.0.0.1")
     port = getattr(cfg, "_data", {}).get("port", 8787)
@@ -301,11 +312,22 @@ def build_menu() -> pystray.Menu:
     )
 
 
-def main() -> None:
+def run() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--console", action="store_true")
     parser.add_argument("--no-webui", action="store_true")
+    parser.add_argument(
+        "--no-autostart-bridge",
+        action="store_true",
+        help="do not bring the bridge up on launch (used when debugging)",
+    )
     args = parser.parse_args()
+
+    # The tray is what gets launched at logon, so it has to bring the bridge up
+    # too - otherwise "autostart" only means an icon appears while Codex still
+    # has nothing to talk to.
+    if not args.no_autostart_bridge:
+        start_bridge()
 
     if not args.no_webui:
         start_webui()
@@ -334,6 +356,18 @@ def main() -> None:
 
     threading.Thread(target=watcher, daemon=True).start()
     icon.run()
+
+
+def main() -> None:
+    try:
+        run()
+    except BaseException:
+        # pythonw has no console; without this log a startup failure looks like
+        # a silent exit from the registry launcher.
+        with ERROR_LOG.open("a", encoding="utf-8") as log:
+            log.write(f"\n--- startup failure: {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+            traceback.print_exc(file=log)
+        raise
 
 
 if __name__ == "__main__":

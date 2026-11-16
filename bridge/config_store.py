@@ -15,8 +15,9 @@ one JSON file next to the bridge, atomic writes, no database.
     ]
     active = "a1b2c3"
 
-The bridge itself is single-upstream: `active` decides which provider it talks
-to, and switching rewrites .env and restarts the process.
+`active` selects the upstream credentials and the default model. The bridge
+forwards the `model` from each request, so providers sharing the same upstream
+can serve several models without a restart.
 """
 
 from __future__ import annotations
