@@ -38,8 +38,8 @@ Portable: nothing lands in `Program Files` and nothing is registered as an insta
 | Your gateway | Use |
 | --- | --- |
 | Serves `/v1/responses` natively | Codex + CC GUI only. Point `base_url` straight at it, no proxy. |
-| Chat Completions only, **no** channel fingerprinting | Everything here: CC Switch routing with `Upstream format: Chat Completions`. |
-| Chat Completions only, **and** rejects non-official clients (`11128`) | CC Switch routing will not be reliable. See [`docs/api2codex-bridge.md`](docs/api2codex-bridge.md) — a bridge you can patch to rewrite the prompt. |
+| Chat Completions only, **no** channel fingerprinting | `install.ps1` + CC Switch routing with `Upstream format: Chat Completions`. |
+| Chat Completions only, **and** rejects non-official clients (`11128`) | `install-bridge.ps1` — same translation, plus an opt-in prompt rewrite. |
 
 ---
 
@@ -186,11 +186,13 @@ It waits for EOF on stdin when it detects a pipe. Redirect stdin from an empty f
 
 ```
 config/codex-config.toml.template   reference config.toml, with the direct-connection alternative
-scripts/install.ps1                 downloads + installs all three components
+scripts/install.ps1                 downloads + installs Codex CLI, CC GUI, CC Switch
 scripts/import-provider.ps1         seeds the CC Switch database (with -DryRun)
-scripts/verify.ps1                  four end-to-end checks
+scripts/install-bridge.ps1          api2codex bridge + prompt-rewrite patch (for 11128 gateways)
+scripts/verify.ps1                  four end-to-end checks, works against either proxy
 scripts/checksums.psd1              pinned SHA256 for every download
-docs/                               background notes
+docs/why-a-proxy.md                 the protocol break, explained
+docs/api2codex-bridge.md            the bridge, what the patch changes, how to run it
 ```
 
 ---

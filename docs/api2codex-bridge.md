@@ -5,38 +5,80 @@
 # 11128) reject the request. This bridge does the same translation and can
 # optionally neutralise the identifying wording.
 #
-# Use this when scripts/install.ps1 + CC Switch routing is not enough.
+# Automated install (recommended):
+#
+#   powershell -ExecutionPolicy Bypass -File .\scripts\install-bridge.ps1 `
+#       -BaseUrl http://127.0.0.1:7863/v1 -ApiKey sk-xxx `
+#       -Model deepseek-v4.1-flash -Start
+#
+# That clones the upstream, applies the patch, creates a venv, writes .env and
+# a launcher, repoints Codex at the bridge, and optionally starts it. The rest
+# of this document explains what the patch does and how to do it by hand.
+
+## Quick install
+
+```powershell
+cd zc-codex-ccswitch
+powershell -ExecutionPolicy Bypass -File .\scripts\install-bridge.ps1 `
+    -BaseUrl http://127.0.0.1:7863/v1 `
+    -ApiKey  sk-your-key `
+    -Model   deepseek-v4.1-flash `
+    -Start
+
+# then confirm the whole chain
+powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 `
+    -ProxyBase http://127.0.0.1:8788/v1 -Model deepseek-v4.1-flash
+```
+
+Flags: `-Port` (default 8787), `-NoSanitize` (translation only, no prompt
+rewrite), `-Force` (re-clone and re-patch), `-Start` (launch when done).
+
+The script anchors its patch on two exact code shapes and **fails loudly** if
+upstream changes them, rather than silently installing an unpatched bridge.
 
 ## What it is
 
-[api2codex](https://github.com/talkcozy/api2codex) is a single-file FastAPI app
-that accepts OpenAI Responses requests, converts them to Chat Completions,
-forwards them upstream, and converts the streamed reply back. Roughly 500 lines,
-three dependencies (`fastapi`, `uvicorn`, `httpx`).
+[api2codex](https://github.com/talkcozy/api2codex) (MIT) is a single-file FastAPI
+app that accepts OpenAI Responses requests, converts them to Chat Completions,
+forwards them upstream, and converts the streamed reply back.
 
-## Setup
+## Doing it by hand
 
 ```powershell
-# 1. Get it
 git clone https://github.com/talkcozy/api2codex.git
 cd api2codex
 
-# 2. Dependencies - any Python 3.10+ works
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install fastapi uvicorn httpx
+```
 
-# 3. Configure
-@"
+Apply the patch described below, then write `.env`:
+
+```
 UPSTREAM_BASE_URL=http://127.0.0.1:7863/v1
 UPSTREAM_API_KEY=sk-your-key
 DEFAULT_MODEL=deepseek-v4.1-flash
 HOST=127.0.0.1
 PORT=8787
-"@ | Set-Content .env -Encoding ASCII
-
-# 4. Run (leave the window open, or see "keep it running" below)
-.\.venv\Scripts\python.exe api2codex.py
+SANITIZE_PROMPT=1
 ```
+
+**Important:** api2codex reads plain `os.environ` and does **not** parse `.env`.
+A `.env` file alone does nothing — the variables have to be in the process
+environment. `install-bridge.ps1` generates a `start-bridge.cmd` that reads
+`.env` and exports each key before launching:
+
+```bat
+@echo off
+cd /d "%~dp0"
+for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env") do (
+  if not "%%~A"=="" set "%%~A=%%~B"
+)
+".venv\Scripts\python.exe" api2codex.py
+```
+
+Without that loader you get a bridge that starts and then fails with
+`UPSTREAM_BASE_URL environment variable is required`.
 
 Point Codex at it in `~/.codex/config.toml`:
 

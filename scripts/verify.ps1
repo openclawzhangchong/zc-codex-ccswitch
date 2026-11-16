@@ -31,12 +31,14 @@ if (Get-Command codex -ErrorAction SilentlyContinue) {
 }
 
 # --------------------------------------------------------------------------
-Write-Step "2. CC Switch proxy listening on 15721"
-$listening = Get-NetTCPConnection -LocalPort 15721 -State Listen -ErrorAction SilentlyContinue
+Write-Step "2. Something is listening on the proxy port"
+$proxyPort = ([uri]$ProxyBase).Port
+$listening = Get-NetTCPConnection -LocalPort $proxyPort -State Listen -ErrorAction SilentlyContinue
 if ($listening) {
-    Pass "listening (pid $($listening[0].OwningProcess))"
+    Pass "port $proxyPort listening (pid $($listening[0].OwningProcess))"
 } else {
-    Fail "nothing listening on 127.0.0.1:15721 - start CC Switch and enable Routing"
+    Fail "nothing listening on 127.0.0.1:$proxyPort"
+    Info "start CC Switch routing, or run scripts\install-bridge.ps1 -Start"
 }
 
 # --------------------------------------------------------------------------
