@@ -12,3 +12,17 @@ desktop.ini
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
+
+# PyInstaller build artifacts (only bridge/exe/CodexBridge.exe is shipped)
+build/
+dist/
+*.spec.bak
+
+# Local runtime state: contains real API keys / PIDs — never commit
+bridge/.env
+bridge/config.json
+bridge/routes.json
+bridge/.bridge.pid
+bridge/*.log
+bridge/bridge-data/
