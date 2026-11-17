@@ -69,23 +69,34 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
 - 提示词中性化（`SANITIZE_PROMPT=1`）对官方 App 同样生效——App 发送的提示词同样
   会被 7863 的渠道指纹拦截，桥接已统一改写
 
-## 界面语言（实测结论）
+## 界面中文化（已实现 ✅）
 
-官方 App **自带 Language 设置**：Settings → General → Language（App UI 语言），
-下拉可选简体中文 / 繁體中文（台灣/香港）等，选择会持久化。
+官方 App 自带 Language 设置（Settings → General → Language，可选简体中文），
+但仅改设置**不够**：Codex 业务界面的文案在 app.asar 前端里，而官方把整套中文
+翻译（39772 条）打包成了 **未接线的消息 chunk**（`async/1561.*.js`）——语言
+开关 `enable_i18n` 由 Statsig 远程控制（Layer 72216192），默认关闭且离线环境
+拿不到配置，导致翻译资源加载不到、界面回退英文。
 
-**但实测：把 Language 设为「简体中文」并重启后，Codex 业务界面（New chat /
-Scheduled / Plugins / Recents / What should we build?）仍是英文。**
+**汉化方案（已实测成功）**：
 
-原因（已核实）：
-- App 是 Chromium 内核打包（chrome.dll 336MB + 220 个语言包，含 zh-CN.pak），
-  但 zh-CN.pak 只覆盖框架层文案（右键菜单、系统对话框）
-- Codex 业务界面的文案在前端资源（app.asar）里，当前版本**没有中文翻译**
-- `--lang=zh-CN` 启动参数同样无效（只影响框架层）
+1. 复制 Store 版到可写副本（`~/.codex/codex-localized/app`，不动 WindowsApps）
+2. 解包 app.asar，把主界面的 `enable_i18n` Statsig 默认值 `!1` → `!0`（1 处）
+3. 重打包 app.asar（用官方 @electron/asar，保证每文件 integrity 字段）
+4. 更新 exe 内嵌 integrity 清单里的 asar 哈希（exe 资源段
+   `[{"file":"resources\app.asar","alg":"SHA256","value":"..."}]`）
+5. 以 `--lang=zh-CN` 启动 → 菜单（文件/编辑/视图/帮助）、侧栏（新对话/定时任务/
+   插件/项目/最近）、主界面（我们要构建什么？）、底部（选择项目/完全访问）
+   **全部中文**
 
-**无法安全汉化**：App 装在 `C:\Program Files\WindowsApps\`，实测写入被拒——
-该目录由 TrustedInstaller 保护且有 Store 签名校验（AppxSignature.p7x），
-修改 app.asar 会破坏签名导致 App 无法启动。等官方补全中文是唯一正路。
+**exe 完整性校验的机制（踩坑记录）**：
+
+- exe 资源段内嵌 integrity 清单（每个 asar 文件一条 SHA256），启动时校验，
+  不匹配直接 FATAL 退出
+- Electron 报错 `(expected vs actual)` 里的 **actual 就是 Electron 对当前 asar
+  按自己算法计算的值**——修哈希不用自己逆推算法，直接把 exe 里的 expected
+  改成报错的 actual，迭代一次即可（asar 不变则 actual 不变）
+- 校验的哈希**不是全文件 SHA256**（实测 full-file 与 actual 不符），
+  是 Electron 内部的分块校验值——所以"让 Electron 自己报 actual"是唯一可靠路径
 
 ## Computer use 为什么是灰的（不破解）
 
