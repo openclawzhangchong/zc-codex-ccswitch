@@ -22,9 +22,13 @@ import traceback
 import webbrowser
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# 冻结为 exe 后，__file__ 指向只读的 _MEIPASS；可写数据改放到
+# BRIDGE_DATA_DIR（exe 旁的 bridge-data/）。源码模式无此变量时行为不变。
+_SOURCE_DIR = Path(__file__).resolve().parent
+BASE = Path(os.environ["BRIDGE_DATA_DIR"]).resolve() if os.environ.get("BRIDGE_DATA_DIR") else _SOURCE_DIR
+BASE.mkdir(parents=True, exist_ok=True)
 os.chdir(BASE)
-sys.path.insert(0, str(BASE))
+sys.path.insert(0, str(_SOURCE_DIR))
 
 import pystray
 import uvicorn
@@ -159,13 +163,19 @@ def start_bridge() -> bool:
     running, _ = bridge_status()
     if running:
         return True
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    exe = pythonw if pythonw.exists() else Path(sys.executable)
+    if getattr(sys, "frozen", False):
+        # Frozen exe: this same binary runs as the bridge when passed --bridge.
+        cmd = [sys.executable, "--bridge"]
+        cwd = str(BASE)
+    else:
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        exe = pythonw if pythonw.exists() else Path(sys.executable)
+        cmd = [str(exe), str(_SOURCE_DIR / "api2codex.py")]
+        cwd = str(_SOURCE_DIR)
     # api2codex reads .env only from os.environ, so pass it explicitly instead
     # of spawning cmd.exe just to load a .cmd file (that caused flash windows).
     proc = subprocess.Popen(
-        [str(exe), str(BASE / "api2codex.py")],
-        cwd=str(BASE), env=_bridge_env(),
+        cmd, cwd=cwd, env=_bridge_env(),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
     )
@@ -219,9 +229,12 @@ def autostart_enabled() -> bool:
 
 def set_autostart(enable: bool) -> None:
     import winreg
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    exe = pythonw if pythonw.exists() else Path(sys.executable)
-    cmd = f'"{exe}" "{BASE / "tray.py"}"'
+    if getattr(sys, "frozen", False):
+        cmd = f'"{sys.executable}"'
+    else:
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        exe = pythonw if pythonw.exists() else Path(sys.executable)
+        cmd = f'"{exe}" "{_SOURCE_DIR / "tray.py"}"'
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
         if enable:
             winreg.SetValueEx(key, RUN_NAME, 0, winreg.REG_SZ, cmd)
