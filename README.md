@@ -104,6 +104,11 @@ powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
 
 ## 桌面端与管理界面
 
+> **不想装 Python / 不想改源码？直接用 [`bridge/exe/CodexBridge.exe`](bridge/exe/README.md)。**
+> 一个 exe 就是托盘 + 管理界面(`:8789`) + 桥接(`:8787`) 三合一，双击即用，首次运行生成
+> 通用配置模板（不含真实 Key），在 WebUI 里填自己的网关即可。想改代码自己打包用
+> `bridge/build-exe.cmd`（详见 [exe 说明](bridge/exe/README.md)）。下面的源码方式照旧可用。
+
 ### 托盘图标
 
 运行 `bridge/tray.py`（`pythonw` 无控制台）。绿点代表桥接运行中，灰点代表停止。
