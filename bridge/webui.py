@@ -13,6 +13,8 @@ Endpoints (all JSON except /):
     PUT    /api/providers/<id>   edit a provider
     DELETE /api/providers/<id>   remove a provider
     POST   /api/activate/<id>    make a provider active and apply it
+    POST   /api/test             validate unsaved base_url/api_key/model
+    POST   /api/test/<id>        validate a saved provider's key against upstream
     POST   /api/sanitize         toggle prompt rewriting
     POST   /api/restart          restart the bridge process
 """
@@ -21,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import socket
@@ -28,6 +31,13 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+# httpx raises InvalidURL on bracketed IPv6 entries in NO_PROXY (e.g. "[::1]"),
+# which some host process chains inject; strip them before any client call.
+for _k in ("NO_PROXY", "no_proxy"):
+    _v = os.environ.get(_k)
+    if _v:
+        os.environ[_k] = _v.replace("[", "").replace("]", "")
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -136,6 +146,79 @@ def write_env(cfg: ConfigStore) -> None:
 
 CODEX_HOME = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 CODEX_CONFIG = CODEX_HOME / "config.toml"
+CATALOG_TEMPLATE = _SOURCE_DIR / "model_catalog_template.json"
+
+log = logging.getLogger("webui")
+
+
+def _test_upstream(base_url: str, api_key: str, model: str = "") -> dict:
+    """Probe the upstream /models with the given key and report the real outcome."""
+    import httpx
+    url = (base_url or "").rstrip("/") + "/models"
+    if not base_url:
+        return {"ok": False, "kind": "input", "message": "API 地址为空"}
+    try:
+        resp = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=15)
+    except httpx.TimeoutException:
+        return {"ok": False, "kind": "timeout", "message": f"连接超时（15s）：{url}"}
+    except httpx.HTTPError as exc:
+        return {"ok": False, "kind": "unreachable", "message": f"地址不可达：{exc}"}
+    if resp.status_code in (401, 403):
+        detail = ""
+        try:
+            detail = resp.json().get("error", {}).get("message", "")
+        except Exception:
+            pass
+        return {"ok": False, "kind": "auth", "status": resp.status_code,
+                "message": f"Key 无效（HTTP {resp.status_code}）" + (f"：{detail}" if detail else "")}
+    if resp.status_code != 200:
+        return {"ok": False, "kind": "http", "status": resp.status_code,
+                "message": f"上游返回 HTTP {resp.status_code}：{resp.text[:200]}"}
+    try:
+        data = resp.json().get("data", [])
+        ids = [m.get("id", "") for m in data if isinstance(m, dict) and m.get("id")]
+    except Exception:
+        return {"ok": False, "kind": "parse", "message": "上游 /models 响应不是预期的 JSON 列表"}
+    result = {"ok": True, "kind": "ok", "models": ids, "models_count": len(ids),
+              "message": f"验证通过：Key 有效，上游列出 {len(ids)} 个模型"}
+    if model:
+        result["model_present"] = model in ids
+        if not result["model_present"]:
+            result["message"] += f"；注意：模型 {model} 不在上游列表里"
+    return result
+
+
+def write_model_catalog(cfg: ConfigStore, toml_text: str) -> None:
+    """Rebuild Codex's model_catalog.json for the active provider.
+
+    The desktop model picker reads this static file; without a refresh it keeps
+    listing the previous provider's models after a switch. Only touched when
+    config.toml actually references model_catalog_json.
+    """
+    import re
+    m = re.search(r"^model_catalog_json\s*=\s*['\"](.+?)['\"]", toml_text, flags=re.M)
+    if not m:
+        return
+    active = cfg.active()
+    if active is None:
+        return
+    probe = _test_upstream(active.get("base_url", ""), active.get("api_key", ""))
+    ids = probe.get("models") or [active["model"]]
+    seen: set[str] = set()
+    ordered = [i for i in ids if i and not (i in seen or seen.add(i))]
+    if not ordered:
+        ordered = [active["model"]]
+    template = json.loads(CATALOG_TEMPLATE.read_text(encoding="utf-8"))["models"][0]
+    entries = []
+    for mid in ordered:
+        entry = dict(template)
+        entry["slug"] = mid
+        entry["display_name"] = mid
+        entries.append(entry)
+    catalog_path = Path(os.path.expandvars(m.group(1))).expanduser()
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_path.write_text(json.dumps({"models": entries}, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8")
 
 
 def write_codex_config(cfg: ConfigStore) -> str | None:
@@ -172,6 +255,11 @@ def write_codex_config(cfg: ConfigStore) -> str | None:
             )
         # No BOM: Codex's TOML loader rejects a leading U+FEFF.
         CODEX_CONFIG.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            write_model_catalog(cfg, text)
+        except Exception as exc:
+            # A catalog refresh must never fail the switch itself.
+            log.warning("model catalog refresh failed: %s", exc)
         return model
     except OSError:
         # A locked or unwritable config must not fail the switch - the bridge
@@ -307,6 +395,25 @@ def activate(provider_id: str) -> JSONResponse:
         "restarted": restarted,
         "model": synced_model,
     })
+
+
+@app.post("/api/test")
+def test_payload(payload: dict) -> JSONResponse:
+    """Validate unsaved form values (base_url/api_key/model) against the upstream."""
+    return JSONResponse(_test_upstream(
+        str(payload.get("base_url", "")),
+        str(payload.get("api_key", "")),
+        str(payload.get("model", "")),
+    ))
+
+
+@app.post("/api/test/{provider_id}")
+def test_provider(provider_id: str) -> JSONResponse:
+    cfg = store()
+    p = next((x for x in cfg.providers if x.get("id") == provider_id), None)
+    if p is None:
+        raise HTTPException(404, "provider not found")
+    return JSONResponse(_test_upstream(p.get("base_url", ""), p.get("api_key", ""), p.get("model", "")))
 
 
 @app.post("/api/sanitize")

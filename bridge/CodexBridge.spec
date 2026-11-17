@@ -6,7 +6,7 @@ config/.env/routes 等可写状态由 bridge_app.py 放到 exe 旁 bridge-data/�
 """
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-datas = [('webui.html', '.')]
+datas = [('webui.html', '.'), ('model_catalog_template.json', '.')]
 hiddenimports = []
 for mod in ('uvicorn', 'fastapi', 'httpx', 'pystray', 'PIL', 'click', 'anyio'):
     hiddenimports += collect_submodules(mod)

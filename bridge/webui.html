@@ -122,7 +122,7 @@
     <div class="actions" style="justify-content: flex-start">
       <button class="primary" id="btnAdd">+ 添加上游</button>
     </div>
-    <div class="hint">同一时间只有一个供应商生效。切换后会重写 .env 并重启桥接。</div>
+    <div class="hint">同一时间只有一个供应商生效。切换后会重写 .env、重启桥接，并同步 Codex 的默认模型与模型列表。「验证」用该供应商的地址和 Key 直连上游，Key 无效会直接报出来。</div>
   </div>
 
   <div class="card">
@@ -164,8 +164,10 @@
     <input type="text" id="fBaseUrl" placeholder="http://127.0.0.1:7863/v1">
     <label>API Key</label>
     <input type="password" id="fApiKey" placeholder="sk-...">
+    <div class="hint" id="modalTestResult" style="margin-top:10px"></div>
     <div class="actions">
       <button id="btnCancel">取消</button>
+      <button id="btnTest">验证</button>
       <button class="primary" id="btnSave">保存</button>
     </div>
   </div>
@@ -176,6 +178,7 @@
 <script>
 let STATE = null;
 let EDITING = null;
+const TEST_RESULTS = {};
 
 const $ = (id) => document.getElementById(id);
 
@@ -239,9 +242,18 @@ function render() {
       <button data-act="activate" data-id="${p.id}" ${isActive ? "disabled" : ""}>
         ${isActive ? "当前" : "切换"}
       </button>
+      <button data-act="test" data-id="${p.id}">验证</button>
       <button data-act="edit" data-id="${p.id}">编辑</button>
       <button class="danger" data-act="del" data-id="${p.id}">删除</button>
     `;
+    const tr = TEST_RESULTS[p.id];
+    if (tr) {
+      const div = document.createElement("div");
+      div.className = "meta";
+      div.style.cssText = "white-space:normal;color:" + tr.color;
+      div.textContent = tr.text;
+      el.querySelector(".grow").appendChild(div);
+    }
     list.appendChild(el);
   }
 }
@@ -269,6 +281,7 @@ function openModal(provider) {
   $("fNotes").value = provider?.notes || "";
   $("fBaseUrl").value = provider?.base_url || "";
   $("fApiKey").value = provider?.api_key || "";
+  $("modalTestResult").textContent = "";
   $("modal").classList.add("show");
   $("fName").focus();
 }
@@ -281,6 +294,25 @@ function closeModal() {
 $("btnAdd").onclick = () => openModal(null);
 $("btnCancel").onclick = closeModal;
 $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+
+$("btnTest").onclick = async () => {
+  const b = $("btnTest");
+  b.disabled = true; b.textContent = "验证中…";
+  const out = $("modalTestResult");
+  try {
+    const r = await api("/api/test", { method: "POST", body: JSON.stringify({
+      base_url: $("fBaseUrl").value,
+      api_key: $("fApiKey").value,
+      model: $("fModel").value,
+    }) });
+    out.textContent = r.message;
+    out.style.color = r.ok ? (r.model_present === false ? "var(--warn)" : "var(--ok)") : "var(--bad)";
+  } catch (e) {
+    out.textContent = "验证失败：" + e.message;
+    out.style.color = "var(--bad)";
+  }
+  b.disabled = false; b.textContent = "验证";
+};
 
 $("btnSave").onclick = async () => {
   const payload = {
@@ -311,6 +343,21 @@ $("list").addEventListener("click", async (e) => {
   const { act, id } = btn.dataset;
   const p = STATE.providers.find((x) => x.id === id);
   if (act === "edit") return openModal(p);
+  if (act === "test") {
+    btn.disabled = true;
+    btn.textContent = "验证中…";
+    try {
+      const r = await api("/api/test/" + id, { method: "POST" });
+      const color = r.ok ? (r.model_present === false ? "var(--warn)" : "var(--ok)") : "var(--bad)";
+      TEST_RESULTS[id] = { text: r.message, color };
+      toast(r.message, r.ok ? "ok" : "err");
+    } catch (err) {
+      TEST_RESULTS[id] = { text: "验证失败：" + err.message, color: "var(--bad)" };
+      toast(err.message, "err");
+    }
+    render();
+    return;
+  }
   if (act === "del") {
     if (!confirm("删除「" + p.name + "」？")) return;
     try {
