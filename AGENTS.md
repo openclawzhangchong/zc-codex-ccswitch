@@ -36,10 +36,12 @@ Chat Completions 且做渠道校验（11128）的本地网关（`:7863` / `:7864
 WindowsApps 原版；正确做法是用可写副本。三句话记住：
 
 1. **翻译表是现成的**：39772 条简体中文就打在 app.asar 里（`async/1561.*.js`），
-   已提取到 `codex-zh/zh-cn-messages.json`。不需要自己翻译。
-2. **只解锁开关不够**：核心补丁是 `enable_i18n` 的 Statsig 默认值 `!1→!0`，
-   我们实测的成品还叠加了 5793 条 `defaultMessage` 中文补全（双机制）。
-   用 `codex-zh/patch.py` 一条命令搞定两者，幂等。
+   `enable_i18n` 打开后官方前端**自动加载**（`locales/zh-CN.json → i.e(1561)`）。不需要自己翻译。
+2. **唯一必需的源码改动 = 1 处 bool**：把 `webview/assets/async/907538.*.js` 里的
+   `get("enable_i18n",!1)` → `!0` 即可（另一处 `184348.*.js` 本来就是 `!0`）。
+   用 `codex-zh/patch.py` 默认就只改这一处，幂等。
+   **不要批量替换 defaultMessage**——早期做的 5793 条替换实测冗余：核心文案
+   "New chat" 等的 defaultMessage 仍是英文，界面却显示中文（来自 chunk 按 id 匹配）。
 3. **重打包后必须同步 exe 哈希**：Electron 启动会校验 app.asar，不匹配 FATAL。
    integrity 算法离线算不出来，**让 App 启动一次报错、从报错里取 actual，
    用 `codex-zh/sync_exe_hash.py` 写回 exe**。改 exe 前先关 App。
