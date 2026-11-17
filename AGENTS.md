@@ -12,11 +12,23 @@ Chat Completions 且做渠道校验（11128）的本地网关（`:7863` / `:7864
 
 | 你的任务 | 先读 |
 |---|---|
-| **把官方 App 改成中文** | [`docs/官方桌面App汉化-SOP.md`](docs/官方桌面App汉化-SOP.md) ← 逐步可执行，AI 照做即可 |
+| 把官方 App 改成中文 | [`docs/官方桌面App汉化-SOP.md`](docs/官方桌面App汉化-SOP.md) ← 逐步可执行，AI 照做即可 |
+| **免源码装托盘+WebUI+桥接** | [`bridge/exe/README.md`](bridge/exe/README.md) ← 单个 `CodexBridge.exe` 双击即用；想改代码用 `bridge/build-exe.cmd` 打包 |
 | 理解汉化原理/踩坑 | [`docs/官方桌面App.md`](docs/官方桌面App.md)、[`docs/经验总结.md`](docs/经验总结.md) |
 | 装整套环境 | [`README.md`](README.md) 快速开始 + `scripts/install.ps1` / `install-bridge.ps1` |
 | 桥接协议/提示词中性化 | [`docs/api2codex-bridge.md`](docs/api2codex-bridge.md)、[`docs/why-a-proxy.md`](docs/why-a-proxy.md) |
 | 跑验收测试 | `test/` 下 5 个 `.ps1`，README「测试脚本」段有命令 |
+
+## 关于 CodexBridge.exe（托盘/WebUI/桥接三合一）
+
+- `bridge/exe/CodexBridge.exe` 是**单文件 exe**，双击即托盘 + WebUI(:8789) + 桥接(:8787)
+- 统一入口 `bridge/bridge_app.py`：无参数=托盘，`--bridge`=桥接（同一 exe 双角色，
+  托盘用它拉起桥接子进程）；打包用 `bridge/build-exe.cmd` → `CodexBridge.spec`
+- **冻结环境的坑**：`__file__` 指向只读 `_MEIPASS`，可写数据（config/.env/pid/日志/routes）
+  必须放 exe 同级 `bridge-data/`。源码已用环境变量 `BRIDGE_DATA_DIR` 统一重定向，
+  源码模式无此变量时行为完全不变——改这几个模块时**别破坏这个机制**
+- 首次运行用通用模板初始化（**不含真实 API Key**），Key 由用户在 WebUI 填
+- 打包 spec 关了 UPX（降 Defender 误报）；exe 本体提交进仓库，构建中间产物 build/dist 不提交
 
 ## 关于官方 App 汉化（最重要，别重新踩坑）
 
