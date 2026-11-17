@@ -15,7 +15,7 @@ Chat Completions 且做渠道校验（11128）的本地网关（`:7863` / `:7864
 | 把官方 App 改成中文 | [`docs/官方桌面App汉化-SOP.md`](docs/官方桌面App汉化-SOP.md) ← 逐步可执行，AI 照做即可 |
 | **免源码装托盘+WebUI+桥接** | [`bridge/exe/README.md`](bridge/exe/README.md) ← 单个 `CodexBridge.exe` 双击即用；想改代码用 `bridge/build-exe.cmd` 打包 |
 | 理解汉化原理/踩坑 | [`docs/官方桌面App.md`](docs/官方桌面App.md)、[`docs/经验总结.md`](docs/经验总结.md) |
-| 装整套环境 | [`README.md`](README.md) 快速开始 + `scripts/install.ps1` / `install-bridge.ps1` |
+| 装整套环境 | [`README.md`](README.md) 快速开始：双击 `bridge/exe/CodexBridge.exe` + WebUI 配置（旧 `scripts/` 三件套安装器已删除，考古走 git 历史） |
 | 桥接协议/提示词中性化 | [`docs/api2codex-bridge.md`](docs/api2codex-bridge.md)、[`docs/why-a-proxy.md`](docs/why-a-proxy.md) |
 | 跑验收测试 | `test/` 下 5 个 `.ps1`，README「测试脚本」段有命令 |
 
@@ -59,8 +59,10 @@ WindowsApps 原版；正确做法是用可写副本。三句话记住：
 
 ## 环境事实（本机 2026-11-17 实测）
 
-- 运行时根目录：`D:\zc-codex-ccswitch\`（`cc-gui\` / `cc-switch\` / `bridge\`）
-- 仓库工作副本：`C:\Users\Administrator\.zcode\workspace\draft-c9b55466-d599-41e8-a0f9-1e2e853b591d\zc-codex-ccswitch`
+- 运行时根目录：`D:\CodexBridge\`（`CodexBridge.exe` + `bridge-data\`）；旧三件套
+  `D:\zc-codex-ccswitch\`（cc-gui/cc-switch/源码桥）已清除
+- 仓库工作副本：`C:\Users\Administrator\repos\zc-codex-ccswitch`
 - 桥接 `:8787`，WebUI `:8789`，网关 `:7863`（默认）/ `:7864`（`7864-` 前缀路由）
 - 官方 App 汉化副本：`~/.codex/codex-localized/app`，快捷方式「Codex 本地化版」
-- git 直连 GitHub 常被重置 → 用 `gh api` 走 Data API 推送（详见 HANDOFF）
+- git 直连 github.com:443 常被重置 → 用 `ssh://git@ssh.github.com:443/...` 推送，
+  推完用 `ls-remote` 比对 SHA（别信 rc）

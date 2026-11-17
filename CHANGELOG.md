@@ -2,6 +2,53 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17（WebUI Key 验证 + 模型目录同步 + 旧安装器删除，WEBUI-VALIDATE-20261117）
+
+### WebUI 新增「验证」功能（Key 是否正确，切换前就拦住）
+
+- `webui.py` 新增 `_test_upstream()`：带 Key 请求上游 `/v1/models`，区分
+  Key 无效（401/403，附上游错误原文）/ 地址不可达 / 超时 / 非 200 / 响应格式异常，
+  成功时返回模型列表并检查所填模型名是否在列。
+- 新端点 `POST /api/test`（按表单值验证，未保存也能测）与
+  `POST /api/test/{provider_id}`（验证已存供应商）。
+- `webui.html`：每张供应商卡片加「验证」按钮（结果就地显示，绿/黄/红），
+  添加/编辑弹窗内也可先验证再保存。
+- 活体实测（新 exe）：7863 → ok 18 模型；v100 → ok 1 模型；错 Key →
+  `Key 无效（HTTP 401）：Invalid API Key`；死地址 → 不可达；不存在 id → 404。
+
+### 修复切换供应商后官方 App 模型选择器不刷新
+
+- 根因：选择器读静态 `model_catalog_json` 文件，旧版切换只同步 config.toml 的
+  model 行，目录文件永远是旧的。
+- `webui.py write_model_catalog()`：切换/编辑生效供应商时按新上游 `/v1/models`
+  重建目录（模板 `bridge/model_catalog_template.json`，保留官方 base_instructions
+  等字段）；上游探测失败则回退为当前模型单条，绝不写空目录。
+- 活体实测：切 7863 → 目录 18 条；切回 v100 → 目录 1 条 Qwen3.6-35B-A3B-Vision；
+  重启汉化版 App 后选择器即显示新模型（CDP 取证）。
+
+### 修复 patch_inplace.py 单块文件哈希碰撞
+
+- 单块文件的 file hash == blocks[0]，同一 64-hex 在节点里出现 2 次，
+  `swap_once` 报 "occurs 2 times" 退出（旧法重打包过的副本必踩）。
+- 修复：识别单块文件后一次替换两处并跳过分块替换；多块文件照旧逐处 swap_once。
+- 红绿验证：旧副本 rc=1 → rc=0；原版 dry-run 输出与修复前逐字节一致。
+
+### 仓库收敛：删除旧三件套安装器
+
+- **删除 `scripts/` 全部 5 个文件**（install.ps1 / install-bridge.ps1 /
+  import-provider.ps1 / verify.ps1 / checksums.psd1）——旧路线装到
+  %LOCALAPPDATA% 且依赖 CC Switch，与 exe 路线冲突、误导新机器。考古走 git 历史。
+- README 重写：exe 路线为唯一主线；AGENTS.md / docs 残留引用同步更新。
+- 核实 install.ps1 尾部「设置→General→Language」承诺：CDP 打开汉化版设置页，
+  常规→语言→应用界面语言下拉含 自动检测/简体中文/English 等，承诺属实，保留。
+
+### 回归
+
+- `test-bridge.ps1` 双上游全 PASS（7863 deepseek-v4.1-flash / v100
+  Qwen3.6-35B-A3B-Vision，均 BRIDGE_TEST_OK）。
+- 源码级隔离测试 10/10 PASS（验证分支 + 目录同步 + 回退）。
+- 重打包 exe 部署 D:\CodexBridge，托盘/WebUI/桥接三进程正常，active 恢复 v100。
+
 ## 2026-11-17（汉化改为等长原位补丁，移除解包/重打包，LOCALIZE-INPLACE-20261117）
 
 ### 纠正"integrity 离线算不出来"的错误前提

@@ -89,7 +89,7 @@ A response that merely returns text proves little. Check three things:
 3. **File access** — point it at a file with known contents and confirm it reports
    the real contents.
 
-`scripts/verify.ps1` covers 1 and 3 through `codex exec`. For a manual tool check:
+`test/test-e2e.ps1` covers 1 and 3 through `codex exec`. For a manual tool check:
 
 ```powershell
 cd <a folder with data.txt containing 3 lines>

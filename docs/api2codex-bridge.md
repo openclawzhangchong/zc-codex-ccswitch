@@ -5,36 +5,28 @@
 # 11128) reject the request. This bridge does the same translation and can
 # optionally neutralise the identifying wording.
 #
-# Automated install (recommended):
-#
-#   powershell -ExecutionPolicy Bypass -File .\scripts\install-bridge.ps1 `
-#       -BaseUrl http://127.0.0.1:7863/v1 -ApiKey sk-xxx `
-#       -Model deepseek-v4.1-flash -Start
-#
-# That clones the upstream, applies the patch, creates a venv, writes .env and
-# a launcher, repoints Codex at the bridge, and optionally starts it. The rest
-# of this document explains what the patch does and how to do it by hand.
+# HISTORICAL NOTE (2026-11-17): the old scripts/install-bridge.ps1 route
+# (clone upstream + venv + .env) has been removed from the repo. The bridge
+# now ships as bridge/exe/CodexBridge.exe (tray + WebUI + bridge in one).
+# Recover the old scripts from git history if you need them. The patch
+# explanation below still applies - the same patched api2codex.py lives in
+# bridge/ and is bundled into the exe.
 
-## Quick install
+## Quick install (current route)
+
+1. Double-click `bridge/exe/CodexBridge.exe` (see `bridge/exe/README.md`).
+2. Open http://127.0.0.1:8789/, add your upstream, click the validate button
+   to check the API key, then activate it. The WebUI writes .env/routes.json,
+   syncs the model line in ~/.codex/config.toml, rebuilds the model catalog,
+   and restarts the bridge.
+3. Confirm the chain:
 
 ```powershell
-cd zc-codex-ccswitch
-powershell -ExecutionPolicy Bypass -File .\scripts\install-bridge.ps1 `
-    -BaseUrl http://127.0.0.1:7863/v1 `
-    -ApiKey  sk-your-key `
-    -Model   deepseek-v4.1-flash `
-    -Start
-
-# then confirm the whole chain
-powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1 `
-    -ProxyBase http://127.0.0.1:8788/v1 -Model deepseek-v4.1-flash
+powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1 -Model your-model
 ```
 
-Flags: `-Port` (default 8787), `-NoSanitize` (translation only, no prompt
-rewrite), `-Force` (re-clone and re-patch), `-Start` (launch when done).
-
-The script anchors its patch on two exact code shapes and **fails loudly** if
-upstream changes them, rather than silently installing an unpatched bridge.
+The patch anchors on two exact code shapes and **fails loudly** if upstream
+changes them, rather than silently installing an unpatched bridge.
 
 ## What it is
 

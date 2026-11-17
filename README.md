@@ -2,18 +2,24 @@
 
 > 🎉 **重大发现（2026-11-16）**：官方 **ChatGPT 桌面 App（包名 `OpenAI.Codex`）原生读取同一份
 > `~/.codex/config.toml`** —— 我们的桥接 `127.0.0.1:8787` 被官方 App 直接使用，非官方模型
-> `hy4flash-free` 对话成功，历史会话三端共享（CLI / CC GUI / 官方 App）。详见
+> 对话成功，历史会话多端共享（CLI / 官方 App）。详见
 > [`docs/官方桌面App.md`](docs/官方桌面App.md)。
 
 > 📖 **文档网站**：<https://openclawzhangchong.github.io/zc-codex-ccswitch/>
 > 📦 **代码仓库**：<https://github.com/openclawzhangchong/zc-codex-ccswitch>
 
-在一台全新的 Windows 电脑上，一条命令装好 **Codex CLI + CC GUI 桌面端 + CC Switch**，并打通自建网关。
+**双击一个 exe 装好桥接（托盘 + 管理界面 + 协议转换三合一），一条命令汉化官方桌面 App**，
+让 Codex CLI / 官方桌面 App 接上你的自建网关。
 
 ```
-CC GUI 桌面端  →  Codex CLI  →  api2codex 桥接 (:8787)  →  你的网关 (:7863)
-                                Responses ↔ Chat 转换 + 提示词中性化
+官方桌面 App / Codex CLI  →  CodexBridge.exe (:8787 桥接 + :8789 管理界面)  →  你的网关
+                              Responses ↔ Chat 转换 + 提示词中性化
 ```
+
+> ⚠️ **旧三件套路线已移除（2026-11-17）**：`scripts/install.ps1`（CC GUI + CC Switch + CLI
+> 三件套安装器）、`scripts/install-bridge.ps1`（克隆上游源码建桥）等旧脚本已删除。
+> 它们把组件装到 `%LOCALAPPDATA%` 并依赖 CC Switch，与现在的 exe 路线冲突、容易误导。
+> 需要考古可从 git 历史找回（`git log -- scripts/`）。**新机器一律走下面的 exe 路线。**
 
 ---
 
@@ -23,9 +29,10 @@ Codex 0.169 **移除了 `wire_api = "chat"`**，只支持 Responses API。但大
 
 更麻烦的是，有些网关会按 Codex 系统提示词做渠道校验，不匹配就返回 `11128 Illegal API invocation from an unapproved channel`，随后账号进入冷却（503）。
 
-CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了渠道校验。所以本项目采用 **api2codex + 提示词中性化补丁** 的方案。
+所以本项目采用 **api2codex 协议转换 + 提示词中性化补丁**，打包进一个零依赖的
+[`CodexBridge.exe`](bridge/exe/README.md)。
 
-> 详细原理见 [`docs/why-a-proxy.md`](docs/why-a-proxy.md) 和 [`docs/api2codex-bridge.md`](docs/api2codex-bridge.md)。
+> 详细原理见 [`docs/why-a-proxy.md`](docs/why-a-proxy.md) 和 [`docs/api2codex-bridge.md`](docs/api2codex-bridge.md)（含历史方案，仅作考古）。
 
 ---
 
@@ -33,12 +40,9 @@ CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了
 
 | 你的网关 | 应该用什么 |
 |---|---|
-| 原生支持 `/v1/responses` | 只装 Codex CLI + CC GUI，`base_url` 直接指过去，无需代理 |
-| 只有 Chat Completions，**不**校验渠道 | `install.ps1` + CC Switch 路由（Upstream format 设为 Chat Completions） |
-| 只有 Chat Completions，**会**校验渠道（`11128`） | `install-bridge.ps1`（本项目推荐的完整方案） |
-
----
-
+| 原生支持 `/v1/responses` | 不用桥接，`config.toml` 的 `base_url` 直接指过去 |
+| 只有 Chat Completions，**不**校验渠道 | `CodexBridge.exe`，WebUI 里关掉提示词中性化 |
+| 只有 Chat Completions，**会**校验渠道（`11128`） | `CodexBridge.exe`，WebUI 里开启提示词中性化（默认开） |
 
 ---
 
@@ -49,10 +53,11 @@ CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了
 
 安装后官方 App **直接使用本项目的桥接**：
 
-- 左下角 provider 显示 `Bridge (api2codex)`（即 config.toml 里的 name）
-- 默认模型 `hy4flash-free`（config.toml 的 model）对话成功
-- 历史会话与 CLI / CC GUI 完全共享（同一 `~/.codex` 会话存储）
-- 模型目录走 `model_catalog_json`（29 个模型：7863 原名 + 7864 前缀）
+- 左下角 provider 显示 config.toml 里的 name（如 `Bridge (api2codex)`）
+- 默认模型 = config.toml 的 `model`，对话成功（**须在 Codex 模式下**；ChatGPT Work 模式不走本地 provider）
+- 历史会话与 CLI 完全共享（同一 `~/.codex` 会话存储）
+- 模型选择器读 `model_catalog_json` 指向的静态文件——**WebUI 切换上游时会自动按新上游的
+  `/v1/models` 重建这份目录**，重启 App 后选择器即为新网关的模型列表
 
 **界面中文化（已实现 ✅）**：官方 App 自带完整简体中文翻译表但语言开关
 `enable_i18n` 默认关闭，本项目在可写副本里**只改这一处开关**（`!1→!0`），
@@ -66,57 +71,60 @@ CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了
 > [`docs/官方桌面App.md`](docs/官方桌面App.md)。
 
 **已知限制**：ChatGPT 侧的 *Computer use* 被区域/账号灰度禁用（`Disabled by your
-organization or unavailable in your region`），与桥接无关，不做客户端破解；
-GUI 自动化用 CC GUI 自带的 computer-use 驱动替代。
+organization or unavailable in your region`），与桥接无关，不做客户端破解。
 
 启动方式：安装后运行 `codex app`，或从开始菜单启动 ChatGPT/Codex；中文版用桌面
 快捷方式「Codex 本地化版」。
 
+---
+
 ## 环境要求
 
 - Windows 10 1803+ / Windows 11（x64）
-- Node.js 22+（仅 Codex CLI 需要）：<https://nodejs.org/>
-- 若要装桥接：Python 3.10+：<https://www.python.org/>
+- **桥接（exe 路线）：零依赖**，不需要 Python / Node
+- 汉化官方 App：Python 3.8+（仅打补丁用）：<https://www.python.org/>
+- Codex CLI（可选）：Node.js 22+：<https://nodejs.org/>
+- 自己改源码/打包：Python 3.10+
 - 一个 OpenAI 兼容网关（地址、API Key、模型名）
 
 ---
 
 ## 快速开始
 
-在仓库根目录打开 PowerShell：
+1. **下载并双击 [`bridge/exe/CodexBridge.exe`](bridge/exe/README.md)**（放到任意目录，
+   建议 `D:\CodexBridge\`）。首次运行在 exe 旁生成 `bridge-data\` 配置模板（不含真实 Key），
+   托盘图标出现，桥接(:8787)和管理界面(:8789)自动启动。
+2. **浏览器打开 <http://127.0.0.1:8789/>**：添加上游（地址 / API Key / 模型名）→
+   点「**验证**」确认 Key 有效 → 点「切换」启用。切换会自动重写 `.env`、`routes.json`、
+   `~/.codex/config.toml` 的 `model` 行和模型目录，并重启桥接。
+3. **首次使用**按 [`config/codex-config.toml.template`](config/codex-config.toml.template)
+   把 `~/.codex/config.toml` 的 provider 指向 `http://127.0.0.1:8787/v1`（之后 WebUI 只同步
+   `model` 行，不动你其他设置）。
+4. **验收**：
 
 ```powershell
-# 1. 安装全部组件
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
-
-# 2. 安装桥接（带提示词中性化，应对 11128 渠道校验）
-powershell -ExecutionPolicy Bypass -File .\scripts\install-bridge.ps1 `
-    -BaseUrl http://127.0.0.1:7863/v1 -ApiKey sk-xxx `
-    -Model deepseek-v4.1-flash -Start
-
-# 3. 完整验收测试
-powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
+powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1 -Model 你的模型名
 ```
 
-`install-bridge.ps1` 会：克隆 api2codex（MIT）→ 精确锚点打补丁（上游变化会报错）→ 建虚拟环境 → 写 `.env` → 生成 `start-bridge.cmd` → 改写 `~/.codex/config.toml` → 可选启动。
+5. **（可选）汉化官方桌面 App**：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\codex-zh\install.ps1
+```
 
 ---
 
-## 桌面端与管理界面
-
-> **不想装 Python / 不想改源码？直接用 [`bridge/exe/CodexBridge.exe`](bridge/exe/README.md)。**
-> 一个 exe 就是托盘 + 管理界面(`:8789`) + 桥接(`:8787`) 三合一，双击即用，首次运行生成
-> 通用配置模板（不含真实 Key），在 WebUI 里填自己的网关即可。想改代码自己打包用
-> `bridge/build-exe.cmd`（详见 [exe 说明](bridge/exe/README.md)）。下面的源码方式照旧可用。
+## 托盘与管理界面
 
 ### 托盘图标
 
-运行 `bridge/tray.py`（`pythonw` 无控制台）。绿点代表桥接运行中，灰点代表停止。
+`CodexBridge.exe` 双击即托盘（源码方式为 `bridge/tray.py`）。绿点代表桥接运行中，灰点代表停止。
 
 - **左键**：打开管理界面
 - **右键菜单**：启动 / 停止 / 重启桥接、开机自动启动、退出
 
-托盘启动时会自动拉起桥接和 WebUI，所以开机自启只需在菜单勾选一次（写一条 `HKCU\...\Run`）。托盘从任意工作目录都能启动，PID 文件会如实记录桥接进程。
+托盘启动时会自动拉起桥接和 WebUI，开机自启只需在菜单勾选一次（写一条 `HKCU\...\Run`）。
+托盘从任意工作目录都能启动，PID 文件会如实记录桥接进程。
 
 ### Web 管理界面
 
@@ -124,12 +132,17 @@ powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
 
 - 每个上游一张卡片，当前使用的会高亮
 - 添加 / 编辑 / 删除 / 切换上游
+- **验证**：对上游发一次带 Key 的 `/v1/models` 请求，直接告诉你 Key 是否有效
+  （401/403 = Key 无效）、地址是否可达、模型名是否在上游列表里。添加/编辑弹窗里也能先验证再保存
 - 提示词中性化开关
 - 连接信息
 
-切换上游会重写 `.env` 和 `~/.codex/config.toml`，并重启桥接。
+切换上游会重写 `.env`、`routes.json`、`~/.codex/config.toml` 的 `model` 行，
+**并按新上游的模型列表重建 `model_catalog_json` 目录文件**，然后重启桥接。
 
-> 注意：api2codex 只在启动时读配置，所以切换需要重启。当前是「单点切换」，因为桥接会把请求里的 `model` 原样转发——**同一网关的多个模型其实可以同时使用**，用 `-m` 或 `/model` 切换即可，不必改配置。
+> 注意：api2codex 只在启动时读配置，所以切换需要重启（WebUI 自动做）。桥接会把请求里的
+> `model` 原样转发——**同一网关的多个模型可以同时使用**，用 `-m` 或 `/model` 切换即可，
+> 不必改配置。跨网关可用 `routes.json` 的前缀路由（`前缀/模型名`），`/v1/models` 会合并列出。
 
 ---
 
@@ -137,14 +150,24 @@ powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
 
 ```powershell
 # 方式 1：CLI 临时指定（不改任何配置）
-codex exec -m hy4flash-free "问题"
-codex exec -m deepseek-v4.1-flash "问题"
+codex exec -m 模型A "问题"
+codex exec -m 模型B "问题"
 
-# 方式 2：WebUI 点「切换」
+# 方式 2：WebUI 点「切换」（换网关/换默认模型）
 # 方式 3：改 ~/.codex/config.toml 的 model 行
 ```
 
-两个模型共用同一个网关地址和 Key，所以桥接层无需改动。
+同一网关的多个模型共用地址和 Key，桥接层无需改动。官方桌面 App 的模型选择器
+在 WebUI 切换后**重启 App** 即刷新。
+
+---
+
+## 源码方式（开发者）
+
+不想用 exe、要改代码：`bridge/` 下是全部源码（api2codex 桥接 + 补丁、config_store、
+webui、tray）。建 venv 装 `fastapi uvicorn httpx pystray Pillow` 后运行 `python tray.py`。
+改完用 `bridge/build-exe.cmd` 重新打包出 `bridge/exe/CodexBridge.exe`
+（详见 [exe 说明](bridge/exe/README.md)）。
 
 ---
 
@@ -158,9 +181,10 @@ codex exec -m deepseek-v4.1-flash "问题"
 | `test-tray.ps1` | 托盘与自启：从 `C:\` 启动、PID 一致性、WebUI 重启 |
 | `test-no-flicker.ps1` | 黑窗闪烁采样检测 |
 | `test-e2e.ps1` | 全链路端到端：CLI + 桥接 + 工具调用 + WebUI |
+| `test-desktop-app.ps1` | 官方桌面 App：进程/配置/桥接指向检查 |
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1  -Model hy4flash-free
+powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1 -Model 你的模型名
 powershell -ExecutionPolicy Bypass -File .\test\test-no-flicker.ps1 -Seconds 10
 powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
 ```
@@ -172,18 +196,26 @@ powershell -ExecutionPolicy Bypass -File .\test\test-e2e.ps1
 ## 常见问题
 
 ### `404 ... /v1/responses`
-provider 的「上游格式」还是 `Responses (原生)`。改成 `Chat Completions (translated)`。
+网关只有 Chat Completions，却把 `base_url` 直接指给了网关。让 Codex 指向桥接
+`http://127.0.0.1:8787/v1`，由桥接做协议转换。
+
+### WebUI「验证」报 Key 无效（HTTP 401/403）
+Key 本身不对——常见错误是把账号 ID / QQ 号当成了 API Key。去网关后台重新生成或复制
+真正的 Key。验证功能就是为在切换前拦住这种错误而加的。
 
 ### `11128 Illegal API invocation from an unapproved channel`
-网关按提示词指纹拦截非官方客户端。CC Switch 过不了这关，用带提示词中性化的 api2codex 桥接。请确认你有授权使用该网关。
+网关按提示词指纹拦截非官方客户端。开启 WebUI 的提示词中性化。请确认你有授权使用该网关。
 
 ### `wire_api = "chat" is no longer supported`
 Codex 0.169 已移除该选项，不要试图设置，改用 Responses + 协议转换。
 
+### 官方 App 模型选择器还是旧网关的模型
+选择器读静态 `model_catalog_json` 文件。用新版 WebUI 切换会自动重建它；改完后**重启 App**。
+
 ### 出现周期性黑窗
 检查 `_run_hidden()` 是否对 `tasklist`/`taskkill`/`wmic` 传了 `CREATE_NO_WINDOW`。用 `test-no-flicker.ps1` 验证。
 
-### 旧会话报 provider "custom" 不存在
+### 旧会话报 provider 不存在
 会话绑定创建时的 provider。新建会话即可，旧会话按设计保留。
 
 更多问题见 [`docs/经验总结.md`](docs/经验总结.md)。
@@ -193,50 +225,52 @@ Codex 0.169 已移除该选项，不要试图设置，改用 Responses + 协议�
 ## 目录结构
 
 ```
-CHANGELOG.md                    更新日志
-README.md                       本文档
+CHANGELOG.md                       更新日志
+README.md                          本文档
 config/codex-config.toml.template  Codex 配置模板
-scripts/install.ps1             一键安装三个组件
-scripts/import-provider.ps1     写入 CC Switch 数据库
-scripts/install-bridge.ps1      api2codex 桥接 + 补丁
-scripts/verify.ps1              四步验证
-scripts/checksums.psd1          下载文件校验值
-bridge/config_store.py          供应商配置（JSON 原子写）
-bridge/webui.py                 管理 API
-bridge/webui.html               管理页面
-bridge/tray.py                  Windows 托盘
-test/*.ps1                      四个测试脚本
-docs/why-a-proxy.md             协议断层原理
-docs/api2codex-bridge.md        桥接方案与补丁
-docs/经验总结.md                踩坑与经验
+bridge/exe/CodexBridge.exe         三合一成品（托盘+WebUI+桥接）
+bridge/build-exe.cmd               一键打包 exe
+bridge/api2codex.py                桥接本体（含提示词中性化补丁）
+bridge/config_store.py             供应商配置（JSON 原子写）
+bridge/webui.py                    管理 API（含 Key 验证、目录同步）
+bridge/webui.html                  管理页面
+bridge/tray.py                     Windows 托盘
+codex-zh/install.ps1               官方 App 汉化一键安装
+codex-zh/patch_inplace.py          等长原位补丁（1 bool + 哈希同步）
+test/*.ps1                         测试脚本
+docs/why-a-proxy.md                协议断层原理
+docs/api2codex-bridge.md           桥接方案与补丁（含历史方案）
+docs/官方桌面App.md                官方 App 接入与汉化原理
+docs/官方桌面App汉化-SOP.md        汉化标准操作流程
+docs/经验总结.md                   踩坑与经验
 ```
 
 ---
 
-## 本机实际安装位置
-
-当前这台机器的运行时文件统一放在 **D 盘**：
+## 本机实际安装位置（2026-11-17 实测）
 
 ```
-D:\zc-codex-ccswitch\
-  ├─ cc-gui\          桌面端（ccgui-next.exe）
-  ├─ cc-switch\       供应商管理（cc-switch.exe + portable.ini）
-  └─ bridge\          桥接 + 托盘 + config.json + .env + .venv
+D:\CodexBridge\
+  ├─ CodexBridge.exe     三合一成品（托盘+WebUI+桥接）
+  └─ bridge-data\        config.json + .env + routes.json + PID 文件
 ```
 
-- 桌面与开始菜单的「CC GUI」快捷方式指向 `D:\zc-codex-ccswitch\cc-gui\ccgui-next.exe`
-- 开机自启注册表项 `CodexBridgeTray` 指向 `D:\zc-codex-ccswitch\bridge\tray.py`
-- 配置和数据仍在用户目录：`~/.codex/`、`~/.cc-switch/`、`~/.ccgui-next/`
-- `D:\zc-codex-ccswitch\_backup-from-c\` 保留了从 C 盘迁移前的配置备份
+- 开机自启注册表项 `CodexBridgeTray` 指向 `D:\CodexBridge\CodexBridge.exe`
+- 汉化副本：`~/.codex/codex-localized/`，桌面快捷方式「Codex 本地化版」
+- Codex 配置与数据：`~/.codex/`
+- 旧三件套（CC GUI / CC Switch / C 盘旧桥）已于 2026-11-17 清除
 
-> 迁移时若手动启动托盘，不要用 `Start-Process -WindowStyle Hidden`——这会让 pystray 进程退出。注册表 Run 项本身不带此参数，开机自启正常。
+> 若手动启动源码版托盘，不要用 `Start-Process -WindowStyle Hidden`——这会让 pystray 进程退出。注册表 Run 项本身不带此参数，开机自启正常。
 
 ---
 
 ## 校验与版本
 
-`scripts/checksums.psd1` 为每个下载文件固定 SHA256，安装时强制校验。npm 包用精确版本号（`@openai/codex@0.169.0`），由 npm 注册表保证完整性。
+- exe 由 `bridge/build-exe.cmd` 从本仓库源码构建（PyInstaller，依赖版本在脚本内固定）。
+- 汉化补丁自带离线校验：`codex-zh/install.ps1 -DryRun` 检查副本状态；`patch_inplace.py`
+  锚点不匹配即报错退出，不会盲改。
+- Codex CLI 用精确版本号安装（`@openai/codex@0.169.0`），由 npm 注册表保证完整性。
 
-当前版本：Codex CLI `0.169.0` / CC GUI `1.2.4` / CC Switch `4.0.32` / api2codex（MIT，latest）。
+当前版本：Codex CLI `0.169.0` / 官方桌面 App `26.1111.2228.0` / api2codex（MIT）。
 
 许可证见 [LICENSE](LICENSE)。
