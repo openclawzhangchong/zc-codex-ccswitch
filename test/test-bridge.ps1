@@ -6,7 +6,7 @@
 # Chinese explanations live in README.md instead.
 #
 #   powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1
-#   powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1 -Port 8788 -Model glm-5.3
+#   powershell -ExecutionPolicy Bypass -File .\test\test-bridge.ps1 -Port 8787 -Model glm-5.3
 
 [CmdletBinding()]
 param(

@@ -1,16 +1,21 @@
-# Test: tray and logon autostart
+# Test: tray and logon autostart (SOURCE mode: python bridge_app.py)
 #
 # Verify the tray starts from any cwd (simulated logon), brings up
 # bridge and WebUI, and writes a PID file matching the port owner.
+# Uses bridge_app.py (the unified entry that seeds config.json/.env on
+# first run); launching tray.py directly would skip seeding.
 #
-# Note: this stops and restarts the tray; bridge config is unchanged.
+# Note: this stops and restarts the python tray; bridge config is unchanged.
+# If CodexBridge.exe is running, stop it first - it owns ports 8787/8789.
+# Defaults are portable: TrayDir = repo bridge/, Pythonw auto-detected
+# (prefers bridge/.venv-build or .venv, then pythonw next to PATH python).
 #
 #   powershell -ExecutionPolicy Bypass -File .\test\test-tray.ps1
 
 [CmdletBinding()]
 param(
-    [string]$TrayDir = 'D:\zc-codex-ccswitch\bridge',
-    [string]$Pythonw = 'C:\Users\Administrator\AppData\Local\Programs\Python\Python312\pythonw.exe',
+    [string]$TrayDir = '',
+    [string]$Pythonw = '',
     [int]$WaitSec = 25
 )
 
@@ -20,18 +25,34 @@ function Bad($m)  { Write-Host "  [FAIL] $m" -ForegroundColor Red; $script:fail+
 function Info($m) { Write-Host "         $m" -ForegroundColor Gray }
 $script:fail = 0
 
+if (-not $TrayDir) { $TrayDir = Join-Path $PSScriptRoot '..\bridge' }
+$TrayDir = (Resolve-Path $TrayDir).Path
+if (-not $Pythonw) {
+    foreach ($cand in @(
+        (Join-Path $TrayDir '.venv-build\Scripts\pythonw.exe'),
+        (Join-Path $TrayDir '.venv\Scripts\pythonw.exe')
+    )) { if (Test-Path $cand) { $Pythonw = $cand; break } }
+}
+if (-not $Pythonw) {
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py) {
+        $cand = Join-Path (Split-Path $py.Source) 'pythonw.exe'
+        if (Test-Path $cand) { $Pythonw = $cand }
+    }
+}
+
 Write-Host "`n== Tray and autostart test ==`n" -ForegroundColor Cyan
 
-$trayScript = Join-Path $TrayDir 'tray.py'
+$trayScript = Join-Path $TrayDir 'bridge_app.py'
 $pidFile = Join-Path $TrayDir '.bridge.pid'
 
-if (-not (Test-Path $trayScript)) { Bad "tray script not found: $trayScript"; exit 1 }
+if (-not (Test-Path $trayScript)) { Bad "entry script not found: $trayScript"; exit 1 }
 if (-not (Test-Path $Pythonw))    { Bad "pythonw not found: $Pythonw"; exit 1 }
 
 # 1. Stop existing tray
 Write-Host "1. Stop existing tray"
 Get-CimInstance Win32_Process -Filter "Name like '%python%'" |
-  Where-Object { $_.CommandLine -like '*tray.py*' } |
+  Where-Object { $_.CommandLine -like '*tray.py*' -or $_.CommandLine -like '*bridge_app.py*' -or $_.CommandLine -like '*api2codex.py*' } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 2
 Ok "cleaned"
@@ -41,7 +62,7 @@ Write-Host "2. Launch tray from C:\"
 Start-Process -FilePath $Pythonw -ArgumentList @($trayScript) -WorkingDirectory 'C:\' -WindowStyle Hidden
 Start-Sleep -Seconds $WaitSec
 $trayProcs = @(Get-CimInstance Win32_Process -Filter "Name like '%python%'" |
-               Where-Object { $_.CommandLine -like '*tray.py*' })
+               Where-Object { $_.CommandLine -like '*bridge_app.py*' })
 if ($trayProcs.Count -ge 1) { Ok "tray alive (PID $($trayProcs[0].ProcessId))" }
 else { Bad "tray did not start"; exit 1 }
 
@@ -49,10 +70,10 @@ else { Bad "tray did not start"; exit 1 }
 Write-Host "3. PID file"
 if (-not (Test-Path $pidFile)) { Bad "PID file missing: $pidFile" }
 else {
-    $pid = [int](Get-Content $pidFile -Raw).Trim()
+    $bridgePid = [int](Get-Content $pidFile -Raw).Trim()
     $conn = Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
-    if ($conn -and $conn.OwningProcess -eq $pid) { Ok "PID $pid matches port 8787 owner" }
-    else { Bad "PID mismatch: file=$pid port=$($conn.OwningProcess)" }
+    if ($conn -and $conn.OwningProcess -eq $bridgePid) { Ok "PID $bridgePid matches port 8787 owner" }
+    else { Bad "PID mismatch: file=$bridgePid port=$($conn.OwningProcess)" }
 }
 
 # 4. Ports
@@ -77,7 +98,7 @@ try {
 Write-Host "6. Autostart entry"
 try {
     $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction Stop).CodexBridgeTray
-    if ($run -match 'pythonw.exe' -and $run -match 'tray.py') { Ok "registry entry present: $run" }
+    if (($run -match 'pythonw.exe' -and $run -match 'tray.py') -or $run -match 'CodexBridge\.exe') { Ok "registry entry present: $run" }
     else { Bad "registry entry unexpected: $run" }
 } catch { Bad "registry entry missing" }
 

@@ -730,6 +730,13 @@ def main() -> None:
 
     log.info("Starting api2codex v%s on %s:%d", __version__, HOST, PORT)
     log.info("Upstream: %s", UPSTREAM_BASE_URL)
+    # Write our own PID: a venv pythonw.exe is a redirector launcher, so the
+    # PID the tray/WebUI got from Popen is the wrapper, not the port owner.
+    try:
+        with open(os.path.join(_DATA_DIR, ".bridge.pid"), "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()) + "\n")
+    except OSError:
+        pass
     uvicorn.run(app, host=HOST, port=PORT)
 
 
