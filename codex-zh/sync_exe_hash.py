@@ -8,8 +8,9 @@
   Electron 启动时会校验 app.asar，不匹配就 FATAL:
     asar_util.cc:144 Integrity check failed for asar archive
     (expected: <A> vs actual: <B>)
-  报错里的 **actual 就是 Electron 对当前 asar 算出的值**——所以正确做法不是
-  自己算 SHA256（算不出来，Electron 用的是内部算法），而是把 B 写进 exe。
+  报错里的 **actual 就是 Electron 对当前 asar header 算出的 SHA256**。
+  注意：该哈希**可以离线复现**（= SHA256(asar header JSON)，已在原版实测），
+  正常流程请用 patch_inplace.py 离线同步；本脚本仅作应急回填（把 B 写进 exe）。
 
 用法：
     # 方式1：直接给 actual（从 Electron 报错的 "actual:" 后面复制）

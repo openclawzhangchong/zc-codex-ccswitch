@@ -54,20 +54,6 @@ function Write-Log { param([string]$m) try { Add-Content -LiteralPath $logFile -
 
 # ---------- 工具 ----------
 . (Join-Path $scriptDir 'asar-util.ps1')
-. (Join-Path $scriptDir 'patch-rules.ps1')
-
-# ---------- 带重试的封装 ----------
-function Invoke-WithRetry {
-    param([scriptblock]$Action, [int]$Retries = 3, [int]$DelaySec = 3, [string]$What = '操作')
-    for ($i = 1; $i -le $Retries; $i++) {
-        try { return (& $Action) }
-        catch {
-            Write-Warn "$What 第 $i/$Retries 次失败：$($_.Exception.Message)"
-            if ($i -lt $Retries) { Write-Info "$DelaySec 秒后重试..."; Start-Sleep -Seconds $DelaySec }
-            else { throw }
-        }
-    }
-}
 
 # ---------- 查找 Codex 安装 ----------
 function Find-CodexInstall {
@@ -204,59 +190,23 @@ function Stop-CodexProcesses {
     Start-Sleep -Seconds 1
 }
 
-# ---------- 补丁（解包 -> 规则库 -> 重打包(重试) -> 原子替换）----------
+# ---------- 补丁（等长原位：改 1 字节 + 离线同步 integrity，不解包/不重打包）----------
 function Patch-App {
-    param([string]$AppDir, [string]$Work)
+    param([string]$AppDir)
     $asar = Join-Path $AppDir 'resources\app.asar'
-    $extracted = Join-Path $Work 'asar-extracted'
-    Write-Info "解包 app.asar ..."
-    Expand-Asar -AsarPath $asar -OutDir $extracted -Force | Out-Null
-
-    Write-Info "应用补丁规则 ..."
-    $summary = Invoke-CodexAllPatches -ExtractedDir $extracted -Apply
-    $criticalMiss = @($summary | Where-Object { $_.Critical -and $_.Hits -eq 0 })
-    foreach ($s in $summary) {
-        $mark = if ($s.Hits -gt 0) { '命中' } else { '未命中' }
-        Write-Info ("补丁[{0}] {1}（{2}）" -f $mark, $s.Desc, $s.Scope)
-        if ($s.Hits -gt 0 -and $s.Files) { Write-Info ("    文件: " + $s.Files) }
-    }
-    if ($criticalMiss.Count -gt 0) {
-        Write-Warn "关键补丁点未命中，当前 Codex 版本可能已变更语言机制。"
-        Write-Warn "以下为自动提取的上下文片段，可反馈给项目维护者以更新规则："
-        foreach ($snip in (Find-LocaleContext -ExtractedDir $extracted)) {
-            Write-Warn "    $snip"
-        }
-        Write-Warn "界面可能仍为英文（功能不受影响）。"
-    }
-
-    $newAsar = Join-Path $Work 'app.asar.new'
-    Write-Info "重新打包 app.asar（失败自动重试）..."
-    Invoke-WithRetry -What '重打包' -Action {
-        New-Asar -InDir $extracted -OutPath $newAsar -OriginalAsar $asar -Force | Out-Null
-    }
-    $fi = Get-Item -LiteralPath $newAsar
-    if ($fi.Length -le 0) { throw "重打包产物为空：$newAsar" }
-    Write-Ok ("重打包完成：{0:N1} MB" -f ($fi.Length / 1MB))
-
-    # 备份原始 asar（仅首次）
+    $exe  = Join-Path $AppDir 'ChatGPT.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { throw "ChatGPT.exe missing: $exe" }
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $py) { throw "python not found on PATH (patch_inplace.py requires Python 3)" }
+    # 备份原始 asar（仅首次，保持与 Store 版哈希比较有效）
     $bak = Join-Path $AppDir 'resources\app.asar.bak'
     if (-not (Test-Path -LiteralPath $bak)) { Copy-FileBytes -Src $asar -Dst $bak }
-
-    # 原子替换：先写 .tmp，校验头部，再 Move 覆盖
-    $resDir = Join-Path $AppDir 'resources'
-    $tmpAsar = Join-Path $resDir 'app.asar.tmp'
-    Copy-FileBytes -Src $newAsar -Dst $tmpAsar
-    $hdr = Read-AsarHeader -AsarPath $tmpAsar   # 校验
-    try {
-        Move-Item -LiteralPath $tmpAsar -Destination $asar -Force
-    } catch {
-        Write-Err "替换 app.asar 失败：$($_.Exception.Message)"
-        if (Test-Path -LiteralPath $tmpAsar) { Remove-Item -LiteralPath $tmpAsar -Force -ErrorAction SilentlyContinue }
-        throw "请确认 Codex（含本地化副本）已完全退出后重试。"
-    }
-    Write-Ok "补丁完成并已替换 app.asar"
+    $script = Join-Path $scriptDir 'patch_inplace.py'
+    Write-Info "原位补丁：改 1 字节 + 离线同步 asar/exe 哈希（不解包/不重打包）..."
+    & python $script $asar $exe
+    if ($LASTEXITCODE -ne 0) { throw "patch_inplace.py failed (exit $LASTEXITCODE)" }
+    Write-Ok "补丁完成（等长原位，无需启动报错回填哈希）"
 }
-
 # ---------- 写/读配置 ----------
 function Write-InstallConfig {
     param([hashtable]$Config)
@@ -350,6 +300,8 @@ if ($mode -eq 'store-copy') {
         Copy-TreeBytes -Src $appDir -Dst $targetApp
         $sw.Stop()
         Write-Ok ("复制完成，耗时 {0:N1} 秒" -f $sw.Elapsed.TotalSeconds)
+        # 刷新 pristine 备份为本次复制的原版，保证升级后“与 Store 一致就跳过复制”判断正确
+        Copy-FileBytes -Src (Join-Path $targetApp 'resources\app.asar') -Dst (Join-Path $targetApp 'resources\app.asar.bak')
     } else {
         Write-Info "副本与 Store 版一致，跳过复制。"
     }
@@ -363,13 +315,7 @@ if (-not $needPatch) {
     $needPatch = -not ($cfg -and $cfg.version -eq $version -and (Test-Path -LiteralPath (Join-Path $targetApp 'ChatGPT.exe')))
 }
 if ($needPatch) {
-    $workDir = Join-Path $localizeRoot ("work-" + (Get-Date -Format 'yyyyMMddHHmmss'))
-    New-Item -ItemType Directory -Force -Path $workDir | Out-Null
-    Patch-App -AppDir $targetApp -Work $workDir
-    # 清理旧的 work-*（只清本工具生成的）
-    Get-ChildItem -LiteralPath $localizeRoot -Directory -Filter 'work*' -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -ne $workDir } |
-        ForEach-Object { try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue } catch {} }
+    Patch-App -AppDir $targetApp
 } else {
     Write-Info "已是最新，跳过补丁。"
 }
@@ -388,7 +334,7 @@ Set-Content -LiteralPath $versionFile -Value $version -Encoding UTF8
 Write-Log "安装完成 version=$version"
 
 # 复制启动脚本到 localizeRoot（自包含）
-foreach ($f in @('install.ps1', 'launch.ps1', 'asar-util.ps1', 'patch-rules.ps1')) {
+foreach ($f in @('install.ps1', 'launch.ps1', 'asar-util.ps1', 'patch_inplace.py')) {
     $srcF = Join-Path $scriptDir $f
     if (Test-Path -LiteralPath $srcF) {
         Copy-Item -LiteralPath $srcF -Destination (Join-Path $localizeRoot $f) -Force -ErrorAction SilentlyContinue

@@ -39,14 +39,15 @@ WindowsApps 原版；正确做法是用可写副本。三句话记住：
    `enable_i18n` 打开后官方前端**自动加载**（`locales/zh-CN.json → i.e(1561)`）。不需要自己翻译。
 2. **唯一必需的源码改动 = 1 处 bool**：把 `webview/assets/async/907538.*.js` 里的
    `get("enable_i18n",!1)` → `!0` 即可（另一处 `184348.*.js` 本来就是 `!0`）。
-   用 `codex-zh/patch.py` 默认就只改这一处，幂等。
+   用 `codex-zh/install.ps1`（内部调 `patch_inplace.py`）等长原位改这一处，幂等。
    **不要批量替换 defaultMessage**——早期做的 5793 条替换实测冗余：核心文案
    "New chat" 等的 defaultMessage 仍是英文，界面却显示中文（来自 chunk 按 id 匹配）。
-3. **重打包后必须同步 exe 哈希**：Electron 启动会校验 app.asar，不匹配 FATAL。
-   integrity 算法离线算不出来，**让 App 启动一次报错、从报错里取 actual，
-   用 `codex-zh/sync_exe_hash.py` 写回 exe**。改 exe 前先关 App。
+3. **改字节后必须同步 integrity（可离线）**：exe 内嵌值 = SHA256(asar header JSON)，
+   逐文件 integrity.hash = SHA256(文件内容)+4MB 分块，均普通 SHA256、可离线算
+   （原版实测三者相等）。`patch_inplace.py` 等长原位改字节并离线同步 header/exe，
+   **不解包/不重打包/不用报错回填**；`sync_exe_hash.py` 仅作应急。改 exe 前先关 App。
 
-> 不要批量跑全量正则替换 3000+ 文件（试过，慢且脆，被叫停）。用 `patch.py`。
+> 不要批量跑全量正则替换 3000+ 文件（试过，慢且脆，被叫停）。用 `patch_inplace.py`（原位）。
 
 ## 代码/脚本约定
 

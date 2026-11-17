@@ -2,6 +2,26 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17（汉化改为等长原位补丁，移除解包/重打包，LOCALIZE-INPLACE-20261117）
+
+### 纠正"integrity 离线算不出来"的错误前提
+
+- 实测原版 26.1111.2228.0：exe 内嵌值 == SHA256(asar header JSON) == `1c5b4197…`；
+  逐文件 integrity.hash == SHA256(文件内容)。均普通 SHA256，可离线复现。
+  旧文档与 `sync_exe_hash.py` 声称"Electron 内部算法、只能从启动报错取 actual"已证伪
+  （"不是全文件 SHA256"这半句仍成立，错的是由此推出的结论）。
+
+### 汉化流程简化
+
+- 新增 `codex-zh/patch_inplace.py`：等长原位改 1 字节（`enable_i18n` `!1`→`!0`）+
+  header 内等长更新 file/block hash + 离线重算 SHA256(header) 写回 exe。幂等。
+- `install.ps1` 的 `Patch-App` 改调 `patch_inplace.py`；删除解包/规则库/重打包/原子替换。
+- `asar-util.ps1` 删除 `New-Asar`（重打包）；保留 `Expand-Asar` 供查阅/旧 `patch.py`。
+- 修复升级回退 bug：每次复制后刷新 `app.asar.bak` 为本次原版，避免重跑 install 把
+  已汉化副本覆盖回英文。
+- 验证：副本实测 gate=`!0`、header/asar/exe 等长、file 与全部分块 hash 匹配、
+  exe==SHA256(新 header)、重跑幂等；`install.ps1 -Silent` 端到端跑通。原版未改动。
+
 ## 2026-11-17（桥接三处修复 + 重打包，BRIDGE-FIX-20261117）
 
 ### 修复 CodexBridge.exe 在新机器上"装好却跑不通"的三个问题

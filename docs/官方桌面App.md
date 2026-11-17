@@ -92,8 +92,9 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
    > 复核证据：已汉化成品里 "New chat"（id=`chatgptConversations.customGpt.newChat`）
    > 等核心文案的 defaultMessage 仍是英文，界面却显示中文，说明中文来自 chunk
    > 按 id 匹配，而非默认文案。早期误做的 5793 条 defaultMessage 替换是冗余的。
-3. 重打包 app.asar（用官方 @electron/asar，保证每文件 integrity 字段）
-4. 更新 exe 内嵌 integrity 清单里的 asar 哈希（exe 资源段
+3. 等长原位补丁：直接在 app.asar 里改那 1 字节，并在 header 内等长更新该文件的
+   integrity.hash 与受影响 4MB 分块 hash（header 长度/文件偏移不变，无需解包/重打包）
+4. 离线重算 SHA256(新 header JSON)，等长写回 exe 内嵌 integrity 清单（exe 资源段
    `[{"file":"resources\app.asar","alg":"SHA256","value":"..."}]`）
 5. 以 `--lang=zh-CN` 启动 → 菜单（文件/编辑/视图/帮助）、侧栏（新对话/定时任务/
    插件/项目/最近）、主界面（我们要构建什么？）、底部（选择项目/完全访问）
@@ -103,11 +104,12 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
 
 - exe 资源段内嵌 integrity 清单（每个 asar 文件一条 SHA256），启动时校验，
   不匹配直接 FATAL 退出
-- Electron 报错 `(expected vs actual)` 里的 **actual 就是 Electron 对当前 asar
-  按自己算法计算的值**——修哈希不用自己逆推算法，直接把 exe 里的 expected
-  改成报错的 actual，迭代一次即可（asar 不变则 actual 不变）
-- 校验的哈希**不是全文件 SHA256**（实测 full-file 与 actual 不符），
-  是 Electron 内部的分块校验值——所以"让 Electron 自己报 actual"是唯一可靠路径
+- 校验的哈希**不是全文件 SHA256**（实测 full-file 与 exe 值不符），而是
+  **SHA256(asar header JSON)**；逐文件 integrity.hash = SHA256(文件内容)，4MB 分块。
+  均为普通 SHA256，**可离线复现**（2026-11-17 原版 26.1111.2228.0 实测：
+  SHA256(header) == exe 内嵌值 == `1c5b4197…`，逐文件 hash == SHA256(content)）
+- 因此 `patch_inplace.py` 改字节后直接离线重算并写回 exe，无需启动报错回填；
+  若仍遇 FATAL `(expected vs actual)`，可用 `sync_exe_hash.py` 把 actual 写回作应急
 
 ## Computer use 为什么是灰的（不破解）
 

@@ -61,8 +61,8 @@ CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了
 
 > **要让新机器也汉化 / 你也是接手的 AI？** 直接照
 > [`docs/官方桌面App汉化-SOP.md`](docs/官方桌面App汉化-SOP.md) 逐步执行
-> （核心就 1 处 bool + 重打包 + 同步 exe 哈希）；脚本在 [`codex-zh/`](codex-zh/)
-> （`patch.py` 改开关、`sync_exe_hash.py` 同步哈希）；原理与踩坑见
+> （核心就 1 处 bool，等长原位补丁 + 离线同步 asar/exe 哈希，不解包/不重打包）；
+> 脚本在 [`codex-zh/`](codex-zh/)（`install.ps1` 一键、`patch_inplace.py` 原位补丁）；原理与踩坑见
 > [`docs/官方桌面App.md`](docs/官方桌面App.md)。
 
 **已知限制**：ChatGPT 侧的 *Computer use* 被区域/账号灰度禁用（`Disabled by your

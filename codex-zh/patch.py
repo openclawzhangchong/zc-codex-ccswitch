@@ -145,7 +145,7 @@ def main():
     else:
         print('[信息] 已跳过 defaultMessage 补全（默认无需；需要时加 --with-messages）')
 
-    print('[完成] 耗时 %.1fs。下一步：用 @electron/asar pack 重打包，再同步 exe 哈希。' % (time.time() - t0))
+    print('[完成] 耗时 %.1fs。推荐改用 patch_inplace.py 直接对 app.asar 等长原位补丁（无需解包/重打包）。' % (time.time() - t0))
 
     if args.stats:
         Path(args.stats).write_text(json.dumps({
