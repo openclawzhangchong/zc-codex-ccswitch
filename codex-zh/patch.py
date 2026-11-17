@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Codex 桌面 App 汉化补丁注入器（双机制）。
+"""Codex 桌面 App 汉化补丁注入器。
 
 用法：
-    python patch.py <解包目录> [--no-messages] [--stats 统计文件.json]
+    python patch.py <解包目录> [--with-messages] [--stats 统计文件.json]
 
     <解包目录>  = app.asar 解包后的根目录（能看到 webview\\assets 那层）
 
-做两件事：
-  1) 解锁官方多语言开关：enable_i18n 的 Statsig 默认值 !1 -> !0
-     （官方把 39772 条简体中文翻译打包进了 app.asar，但开关默认关闭，
-       翻译成"孤儿 chunk"永不加载，界面回退英文）
-  2) 用官方翻译表 zh-cn-messages.json 补全 defaultMessage
-     （覆盖 id 不在翻译表里的文案；这两步是"双保险"，1 是核心必需）
+必需改动只有 1 处：
+  * 解锁官方多语言开关：enable_i18n 的默认值 !1 -> !0（在 907538.*.js）
+    官方前端随后会自动加载自带的 locales/zh-CN.json（chunk 1561，39772 条翻译），
+    界面即全中文——不需要自己翻译，也不需要改 defaultMessage。
 
-两个补丁都幂等：重复运行不会破坏已打补丁的文件。
+可选（默认关闭）：
+  * --with-messages：额外用 zh-cn-messages.json 补全 defaultMessage。
+    这是早期误以为必需而做的冗余步骤，实测汉化不依赖它（核心文案的
+    defaultMessage 仍是英文但界面显示中文，说明中文来自 chunk 自动加载）。
+    保留仅为兼容旧产物，正常情况下不要用。
+
+幂等：重复运行不会破坏已打补丁的文件。
 不碰 app.asar 本身——打完补丁请用 @electron/asar 重新打包（见 docs/SOP）。
 """
 import argparse, json, re, sys, time
@@ -109,9 +113,10 @@ def patch_messages(root: Path, msgs: dict):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Codex 桌面 App 汉化补丁注入器（双机制）')
+    ap = argparse.ArgumentParser(description='Codex 桌面 App 汉化补丁注入器')
     ap.add_argument('root', help='app.asar 解包后的根目录')
-    ap.add_argument('--no-messages', action='store_true', help='只解锁 enable_i18n，不替换 defaultMessage')
+    ap.add_argument('--with-messages', action='store_true',
+                    help='额外补全 defaultMessage（早期冗余步骤，正常汉化不需要）')
     ap.add_argument('--stats', help='把统计写到指定 JSON 文件')
     args = ap.parse_args()
 
@@ -127,16 +132,18 @@ def main():
 
     n_msg = n_miss = 0
     f_msg = []
-    if not args.no_messages:
+    if args.with_messages:
         if not TABLE.exists():
             print('[警告] 翻译表缺失: %s（跳过 defaultMessage 补强）' % TABLE)
         else:
             msgs = json.loads(TABLE.read_text(encoding='utf-8'))
             n_msg, f_msg, n_miss = patch_messages(root, msgs)
-            print('[OK] defaultMessage 补全: %d 条 / %d 文件（无翻译 id: %d）'
+            print('[OK] defaultMessage 补全（冗余）: %d 条 / %d 文件（无翻译 id: %d）'
                   % (n_msg, len(f_msg), n_miss))
             for f in f_msg[:10]:
                 print('     ', f)
+    else:
+        print('[信息] 已跳过 defaultMessage 补全（默认无需；需要时加 --with-messages）')
 
     print('[完成] 耗时 %.1fs。下一步：用 @electron/asar pack 重打包，再同步 exe 哈希。' % (time.time() - t0))
 
