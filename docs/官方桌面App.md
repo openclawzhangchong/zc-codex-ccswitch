@@ -71,6 +71,10 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
 
 ## 界面中文化（已实现 ✅）
 
+> **要自己动手？直接看 [`官方桌面App汉化-SOP.md`](官方桌面App汉化-SOP.md)** ——
+> 逐步可执行，补丁脚本和翻译表都在仓库 `codex-zh/`（AI 接手照做即可）。
+> 本节只讲原理与踩坑。
+
 官方 App 自带 Language 设置（Settings → General → Language，可选简体中文），
 但仅改设置**不够**：Codex 业务界面的文案在 app.asar 前端里，而官方把整套中文
 翻译（39772 条）打包成了 **未接线的消息 chunk**（`async/1561.*.js`）——语言
@@ -80,7 +84,10 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
 **汉化方案（已实测成功）**：
 
 1. 复制 Store 版到可写副本（`~/.codex/codex-localized/app`，不动 WindowsApps）
-2. 解包 app.asar，把主界面的 `enable_i18n` Statsig 默认值 `!1` → `!0`（1 处）
+2. 注入**双机制补丁**（仓库 `codex-zh/patch.py` 一键完成，幂等）：
+   - ①解锁开关：`enable_i18n` Statsig 默认值 `!1` → `!0`（2 处，核心必需）
+   - ②补全消息：用官方翻译表（39772 条）把未翻译的 `defaultMessage` 换成中文
+     （实测 5793 条 / 15 文件；仅做①时部分文案仍英文，两者都做才是验证过的成品）
 3. 重打包 app.asar（用官方 @electron/asar，保证每文件 integrity 字段）
 4. 更新 exe 内嵌 integrity 清单里的 asar 哈希（exe 资源段
    `[{"file":"resources\app.asar","alg":"SHA256","value":"..."}]`）
