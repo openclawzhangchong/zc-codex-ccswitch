@@ -166,15 +166,26 @@ def main():
         new_block_hash = None
         if integrity:
             old_file_hash = integrity['hash']
-            if old_file_hash != new_file_hash:
-                region = swap_once(region, old_file_hash, new_file_hash, 'file')
             block_size = int(integrity.get('blockSize', 4194304))
             blocks = integrity.get('blocks')
+            # A file smaller than one block stores the same hash twice (file
+            # hash == blocks[0]); the count==1 guard would reject that, so the
+            # single-block case swaps both roles in one equal-length replace.
+            single_block = bool(blocks) and len(blocks) == 1 and blocks[0] == old_file_hash
             if blocks and idx >= 0:
                 block_idx = idx // block_size
                 b_start = block_idx * block_size
                 b_end = min(b_start + block_size, size)
                 new_block_hash = sha256(new_blob[b_start:b_end])
+            if old_file_hash != new_file_hash:
+                if single_block:
+                    n = region.count(old_file_hash.encode())
+                    if n != 2:
+                        sys.exit('[error] single-block hash occurs %d times in node' % n)
+                    region = region.replace(old_file_hash.encode(), new_file_hash.encode())
+                else:
+                    region = swap_once(region, old_file_hash, new_file_hash, 'file')
+            if blocks and idx >= 0 and not single_block:
                 old_block_hash = blocks[block_idx]
                 if old_block_hash != new_block_hash:
                     region = swap_once(region, old_block_hash, new_block_hash, 'block')
