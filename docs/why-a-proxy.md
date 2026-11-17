@@ -43,7 +43,11 @@ Tool calls are the fragile part. An agent like Codex is useless without them, an
 a translator that gets the argument-streaming wrong produces a model that looks
 responsive but never executes anything.
 
-## Where CC Switch fits
+## Where CC Switch fits (historical alternative)
+
+> Note (2026-11-17): CC Switch is no longer part of this repo's route. This
+> section explains why a translating proxy is needed at all; the shipped
+> solution is CodexBridge.exe (api2codex + prompt neutralisation).
 
 CC Switch runs a local proxy on `127.0.0.1:15721`. In Routing mode it:
 

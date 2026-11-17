@@ -21,9 +21,9 @@
 2. 双击运行。首次运行会在 exe 同级自动创建 `bridge-data\`，里面是通用配置模板
    （**不含任何真实 API Key**，需你自己填）。
 3. 右键托盘图标 →「打开管理界面」，浏览器打开 http://127.0.0.1:8789/。
-4. 在 WebUI 里把网关地址、API Key、模型改成你自己的，点切换/重启。
-5. 让 Codex CLI / CC GUI / 官方 App 指向 `http://127.0.0.1:8787/v1`
-   （see `../config/codex-config.toml.template`）。
+4. 在 WebUI 里把网关地址、API Key、模型改成你自己的，先点「验证」确认 Key 有效，再点切换。
+5. 让 Codex CLI / 官方 App 指向 `http://127.0.0.1:8787/v1`
+   （按 `../../config/codex-config.toml.template` 写 `~/.codex/config.toml`）。
 
 `bridge-data\` 里的文件：
 - `config.json` — 供应商/模型配置（WebUI 读写）

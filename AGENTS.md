@@ -4,9 +4,10 @@
 
 ## 这个项目是什么
 
-让官方 Codex / ChatGPT 桌面 App 和 CC GUI 通过自建桥接（`api2codex`，`:8787`）访问只支持
-Chat Completions 且做渠道校验（11128）的本地网关（`:7863` / `:7864`）。
-仓库既能让新机器一键复现安装，也包含官方 App 的完整汉化方案。
+让官方 Codex / ChatGPT 桌面 App 和 Codex CLI 通过自建桥接（`api2codex`，打包为
+`CodexBridge.exe`，`:8787`）访问只支持 Chat Completions 且做渠道校验（11128）的
+本地网关。仓库既能让新机器一键复现安装（双击 exe + WebUI 配置），也包含官方 App
+的完整汉化方案。旧 CC GUI / CC Switch 三件套路线已移除（见 git 历史）。
 
 ## 先读哪个文档
 

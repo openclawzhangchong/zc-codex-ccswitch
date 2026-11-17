@@ -165,7 +165,8 @@ codex exec -m 模型B "问题"
 ## 源码方式（开发者）
 
 不想用 exe、要改代码：`bridge/` 下是全部源码（api2codex 桥接 + 补丁、config_store、
-webui、tray）。建 venv 装 `fastapi uvicorn httpx pystray Pillow` 后运行 `python tray.py`。
+webui、tray）。建 venv 装 `fastapi uvicorn httpx pystray Pillow` 后运行
+`python bridge_app.py`（统一入口，首启自动播种配置；**不要直接跑 tray.py**，会跳过播种）。
 改完用 `bridge/build-exe.cmd` 重新打包出 `bridge/exe/CodexBridge.exe`
 （详见 [exe 说明](bridge/exe/README.md)）。
 

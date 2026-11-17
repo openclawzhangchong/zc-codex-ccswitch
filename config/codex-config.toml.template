@@ -1,29 +1,32 @@
-# Codex CLI provider config pointing at CC Switch's local proxy.
-# The installer substitutes __UPSTREAM_BASE_URL__ and __MODEL__.
+# Codex provider config pointing at the CodexBridge.exe bridge.
+# Copy to ~/.codex/config.toml (UTF-8 WITHOUT BOM) and replace __MODEL__
+# with your gateway model name. After that, the bridge WebUI
+# (http://127.0.0.1:8789/) keeps the `model` line in sync whenever you
+# switch providers, and leaves every other setting alone.
 #
 # How the chain works:
 #
-#   CC GUI / Codex CLI  ->  127.0.0.1:15721 (CC Switch proxy)  ->  your gateway
+#   Codex CLI / official desktop App  ->  127.0.0.1:8787 (CodexBridge.exe)  ->  your gateway
 #
-# Codex 0.169+ only speaks the Responses API (wire_api = "chat" was removed),
-# so CC Switch has to translate Responses -> Chat Completions for gateways that
-# only expose /v1/chat/completions. That is what the "Upstream format" setting
-# on the provider card controls: set it to "Chat Completions".
+# Codex 0.169+ only speaks the Responses API (wire_api = "chat" was removed).
+# The bridge translates Responses -> Chat Completions for chat-only gateways
+# and can neutralise the Codex prompt fingerprint (11128 channel check).
+# The real upstream URL/key live in the bridge (WebUI), not in this file.
 
 model = "__MODEL__"
 model_reasoning_effort = "high"
-model_provider = "ccswitch"
+model_provider = "bridge"
 
-[model_providers.ccswitch]
-name = "CC Switch Local Proxy"
-base_url = "http://127.0.0.1:15721/v1"
+[model_providers.bridge]
+name = "Bridge (api2codex)"
+base_url = "http://127.0.0.1:8787/v1"
 wire_api = "responses"
-requires_openai_auth = false
-# CC Switch injects the real upstream key itself; this placeholder just has to
-# be present so the proxy accepts the request.
-experimental_bearer_token = "PROXY_MANAGED"
 
-# Reference: talking to the gateway directly (no CC Switch). Use this only if
+# Optional: static model catalog for the official desktop App's model picker.
+# The WebUI rebuilds this file automatically when you switch providers.
+# model_catalog_json = "C:/Users/<you>/.codex/model_catalog.json"
+
+# Reference: talking to the gateway directly (no bridge). Use this only if
 # your gateway serves /v1/responses natively.
 #
 # [model_providers.direct]

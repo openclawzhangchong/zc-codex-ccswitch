@@ -2,6 +2,33 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17（新机器视角审计：清除残留误导 + 源码模式两处真 bug，NEW-MACHINE-AUDIT-20261117）
+
+### 文档/模板收敛（新 AI 拉仓库不再被带偏）
+
+- **`config/codex-config.toml.template` 重写**：原来还是 CC Switch 旧模板
+  （指向 :15721、provider=ccswitch），与新 README 直接矛盾。改为桥接路线
+  （provider=bridge → 127.0.0.1:8787/v1），tomllib 解析验证通过。
+- `docs/官方桌面App.md`：加历史横幅，「主用 CC GUI」建议改为官方 App + 汉化副本。
+- `AGENTS.md` 项目描述、`bridge/exe/README.md` 步骤、`docs/why-a-proxy.md`
+  CC Switch 段、`docs/经验总结.md` 迁移段：全部标注旧路线已移除/历史。
+- README 源码方式入口纠正为 `python bridge_app.py`（直接跑 tray.py 会跳过首启播种）。
+
+### 修复 test-tray.ps1 在新机器必挂的三处问题
+
+- 默认值写死本机路径（`D:\zc-codex-ccswitch\bridge` + 本机 pythonw）→ 改为
+  脚本相对 bridge/ + 自动探测 pythonw（优先 .venv-build/.venv）。
+- `$pid` 是 PowerShell 只读自动变量，赋值即抛错 → 改名 `$bridgePid`。
+- 入口从 tray.py 改为 bridge_app.py（统一入口才播种 config/.env）；
+  自启注册表判据同时接受 exe 与源码两种形态。
+
+### 修复源码模式 PID 文件记录的是 venv 启动器而非真进程
+
+- 取证：venv 的 pythonw.exe 是重定向启动器，Popen 拿到包装进程 PID，
+  真实解释器是其子进程 → PID 文件与 8787 端口属主不一致，taskkill 会杀错。
+- 修复：api2codex 启动时自写真 PID 到 `.bridge.pid`（exe 模式行为不变）。
+- 重打包 exe 部署；`test-tray.ps1` 源码模式 6 步全 PASS（含 WebUI 重启）。
+
 ## 2026-11-17（WebUI Key 验证 + 模型目录同步 + 旧安装器删除，WEBUI-VALIDATE-20261117）
 
 ### WebUI 新增「验证」功能（Key 是否正确，切换前就拦住）
