@@ -54,12 +54,14 @@ CC Switch 的路由能做协议转换，但**它不改写请求体**，过不了
 - 历史会话与 CLI / CC GUI 完全共享（同一 `~/.codex` 会话存储）
 - 模型目录走 `model_catalog_json`（29 个模型：7863 原名 + 7864 前缀）
 
-**已知限制（实测）**：
-- App 自带 Language 设置（Settings → General → Language，可选简体中文），但
-  **Codex 业务界面暂无中文翻译**——设为简体中文并重启后 New chat / Recents /
-  What should we build? 仍为英文；汉化包体不可行（WindowsApps 只读 + 签名校验）
-- ChatGPT 侧的 *Computer use* 被区域/账号灰度禁用（`Disabled by your
-  organization or unavailable in your region`），与桥接无关，不做客户端破解；
+**界面中文化（已实现 ✅）**：官方 App 的语言开关 `enable_i18n` 被远程
+配置关闭，本项目通过汉化副本解锁——菜单（文件/编辑/视图/帮助）、侧栏（新对话/
+定时任务/插件/项目/最近）、主界面（我们要构建什么？）全部中文。详见
+[`docs/官方桌面App.md`](docs/官方桌面App.md)。
+
+**已知限制**：ChatGPT 侧的 *Computer use* 被区域/账号灰度禁用（`Disabled by your
+organization or unavailable in your region`），与桥接无关，不做客户端破解；
+GUI 自动化用 CC GUI 自带的 computer-use 驱动替代。；
   本机 GUI 自动化用 CC GUI 自带的 computer-use 驱动
 
 启动方式：安装后运行 `codex app`，或从开始菜单启动 ChatGPT/Codex。
