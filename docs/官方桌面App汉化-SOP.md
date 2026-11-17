@@ -2,14 +2,24 @@
 
 > 面向拿到本仓库的 AI / 开发者。**照做即可复现中文界面**，不用重新踩坑。
 > 本文件是操作手册；原理与踩坑见 [`官方桌面App.md`](官方桌面App.md)、[`经验总结.md`](经验总结.md)。
+>
+> **核心结论（2026-11-17 复核修正）**：真正必需的源码改动只有 **1 处布尔值**——
+> 把 `webview/assets/async/907538.*.js` 里的 `get("enable_i18n",!1)` 改成 `!0`。
+> 官方前端会自动加载自带的 `locales/zh-CN.json`（chunk 1561，39772 条翻译），
+> 界面即全中文。**不需要**批量替换 defaultMessage——早期做的 5793 条替换是冗余的
+> （证据：已汉化成品里 "New chat"/"What should we build?" 等核心文案的
+> defaultMessage 仍是英文，界面却显示中文，说明中文来自 chunk 而非默认文案）。
+> "复制副本 + 解包 + 重打包 + 同步 exe 哈希"这些步骤不是源码改动多，而是
+> WindowsApps 只读 + Electron asar 完整性校验的客观要求。
 
 ---
 
 ## 0. 一句话结论
 
-官方 App 自带**完整简体中文翻译表**（39772 条，就打在 app.asar 里），但语言开关
-`enable_i18n` 由 Statsig 远程控制、默认关闭，翻译 chunk 成了"孤儿"，界面才回退英文。
-**汉化 = 解锁开关 + 补全消息 + 重打包 + 同步 exe 哈希**，四步全做才能启动且全中文。
+官方 App 自带**完整简体中文翻译表**（39772 条，chunk `async/1561.*.js`），但语言开关
+`enable_i18n` 默认关闭，翻译 chunk 不会被加载，界面才回退英文。
+**汉化 = 改 1 处 bool → 重打包 asar → 同步 exe 哈希**；翻译表由官方前端自动加载，
+不用自己翻译、也不用批量替换 defaultMessage。
 
 ---
 
@@ -19,9 +29,9 @@
 |---|---|
 | 不要改 WindowsApps 原版 | 只读 + 签名校验，写入必失败。必须复制可写副本到 `~/.codex/codex-localized/app` |
 | 翻译表在哪 | app.asar 内 `webview/assets/async/1561.*.js`，已提取到本仓库 `codex-zh/zh-cn-messages.json`（39772 条） |
-| 开关在哪 | `webview/assets/async/907538.*.js`（和另一处）里 `x?.get("enable_i18n",!0)`，原值是 `!1` |
-| 是**双机制** | ①`enable_i18n !1→!0`（核心）②`defaultMessage` 中文补全（实测 5793 条/15 文件）——两者都做了才是我们验证过的成品 |
-| 第三方 installer 的坑 | 网上开源 installer 的规则是反引号 + 只扫顶层 `webview/assets`，在 26.1111 上**未命中**（实测日志"关键补丁点未命中"）。它的 asar 打包也**不保留逐文件 integrity、不同步 exe 哈希**，单独跑会 FATAL。所以本仓库方案是"它负责复制/解包/重打包壳，我们补双机制补丁 + 哈希同步" |
+| 开关在哪（**唯一必需改动**） | `webview/assets/async/907538.*.js` 里 `get("enable_i18n",!1)` → `!0`。另一处 `184348.*.js` 本来就是 `!0`，不用动 |
+| 翻译表自动加载 | `enable_i18n` 为 true 后，官方前端走 `locales/zh-CN.json → i.e(1561)` 自动加载 39772 条中文。**不要**批量替换 defaultMessage（冗余，早期误做，见顶部复核） |
+| 第三方 installer 的坑 | 网上开源 installer 的规则是反引号 + 只扫顶层 `webview/assets`，在 26.1111 上**未命中**（实测日志"关键补丁点未命中"）——它想改的正是 `enable_i18n`，但写法不对。用 `patch.py`（正确锚点）或手动改那 1 处即可 |
 | integrity 算法不可离线复现 | Electron 的 asar 逐文件 integrity 不是裸 SHA256（实测不匹配）。**必须让 Electron 自己启动一次报出 actual**，再写回 exe。这就是 `sync_exe_hash.py` 的作用 |
 | 权限/锁 | 改 exe 前先关闭正在运行的 App，否则文件被锁写入失败 |
 
@@ -35,9 +45,9 @@
 | `launch.ps1` / `launch.cmd` | 启动器：版本变化时自动重打补丁，带 `--lang=zh-CN` |
 | `asar-util.ps1` | asar 解包/打包的 .NET 实现（install.ps1 依赖） |
 | `patch-rules.ps1` | 开源 installer 的规则库（**本版本未命中，仅作参考/旧版兼容**） |
-| `zh-cn-messages.json` | 官方翻译表，39772 条（从 1561 chunk 提取） |
-| **`patch.py`** | ★ 我们写的双机制补丁注入器（幂等）：解锁 `enable_i18n` + 补全 `defaultMessage` |
-| **`sync_exe_hash.py`** | ★ 我们写的 exe 哈希同步器：从 Electron 报错提取 actual 并写回 exe |
+| `zh-cn-messages.json` | 官方翻译表，39772 条（从 1561 chunk 提取，仅供查阅，**汉化不需要用它**) |
+| **`patch.py`** | ★ 补丁注入器：默认**只改必需的 1 处 bool**；`--with-messages` 才附带早期冗余的 defaultMessage 补全（正常不用） |
+| **`sync_exe_hash.py`** | ★ exe 哈希同步器：从 Electron 报错提取 actual 并写回 exe |
 
 ---
 
@@ -51,26 +61,37 @@ Get-AppxPackage | ? Name -match 'OpenAI.*Codex' | Select Name,Version,InstallLoc
 curl http://127.0.0.1:8787/health
 ```
 
-### 步骤 2 — 生成可写副本 + 解包
+### 步骤 2 — 一键：可写副本 + 解包 + 改开关 + 重打包
+
+仓库自带的 `install.ps1` 已把"复制副本 → 解包 → 改 `enable_i18n` → 重打包 asar"
+全自动完成（补丁规则已修正为命中真实锚点，递归扫 `async/` 子目录）：
 ```powershell
 cd codex-zh
-.\install.ps1                    # 默认 store-copy 模式：复制到 ~/.codex/codex-localized/app 并解包
+.\install.ps1                    # 输出应看到：补丁[命中] 开启官方多语言开关 enable_i18n ... 907538.*.js
 ```
-> 若 `install.ps1` 提示"关键补丁点未命中"，**属正常**——它的规则在本版本没命中，
-> 真正的补丁在步骤 3 由 `patch.py` 完成。
+如果输出里这条是「命中」并列出 `907538.*.js`，步骤 3 可**整个跳过**（开关已改好）。
+只有在它仍显示「未命中」时，才手动按步骤 3 处理。
 
-### 步骤 3 — 注入双机制补丁（★核心）
+### 步骤 3 — 解锁语言开关（★唯一必需的源码改动，就 1 处）
+
 解包目录是 `~/.codex/codex-localized/work-*/asar-extracted`（install.ps1 会打印路径），
-或任意你自己解包 app.asar 的目录：
+或任意你自己解包 app.asar 的目录。**最简做法：手动改 1 个字符**——打开
+`webview/assets/async/907538.*.js`，把 `get("enable_i18n",!1)` 的 `1` 改成 `0`。
+（另一处 `184348.*.js` 本来就是 `!0`，不用动。）
+
+或用脚本（幂等，默认只改这一处）：
 ```bash
-python codex-zh/patch.py "<解包目录>" --stats patch-stats.json
+python codex-zh/patch.py "<解包目录>"
 ```
-预期输出类似：
+预期输出：
 ```
-[OK] enable_i18n 解锁: 2 处 / 2 文件
-[OK] defaultMessage 补全: N 条 / M 文件（无翻译 id: ...）
+[OK] enable_i18n 解锁: 1 处 / 1 文件
+[信息] 已跳过 defaultMessage 补全（默认无需；需要时加 --with-messages）
 ```
-> `--no-messages` 可只解锁开关（最小改动）。**推荐全做**（我们验证过的成品是双机制）。
+> `enable_i18n` 变为 true 后，官方前端自动加载 `locales/zh-CN.json`（chunk 1561，
+> 39772 条），界面全中文。**不要**加 `--with-messages`——那是早期误做的大量
+> defaultMessage 替换，实测冗余（见顶部复核结论）。
+> 如果 `install.ps1` 已提示补丁命中且你确认 `907538` 里已是 `!0`，步骤 3 可跳过。
 
 ### 步骤 4 — 重打包 app.asar
 用仓库自带的 `asar-util.ps1`（`install.ps1` 已经做过一次重打包；如果你在它解包后的目录
@@ -112,10 +133,10 @@ python codex-zh/sync_exe_hash.py "...\app\ChatGPT.exe" --from-log fatal.log
 
 ## 4. AI 决策树（遇到情况怎么办）
 
-- **要最小改动、怕风险** → `patch.py --no-messages`，只解锁 `enable_i18n`；但本版本实测
-  仅解锁后部分文案仍英文，完整中文请做双机制。
-- **install.ps1 报"关键补丁点未命中"** → 不必修它，那是开源规则与新版本不匹配；
-  用 `patch.py` 即可。
+- **要最小改动、怕风险** → 手动改那 1 个字符（`907538.*.js` 的 `!1`→`!0`）或
+  `patch.py`（默认只改这一处），官方 chunk 自动加载全中文，**足够**。
+- **install.ps1 报"关键补丁点未命中"** → 不必慌，它的规则写法（反引号+只扫顶层）在
+  26.1111 没匹配上；用 `patch.py` 或手动改即可。
 - **启动 FATAL、integrity failed** → 步骤 5，`sync_exe_hash.py` 从报错提取 actual 写回。
 - **App 更新后中文丢失** → `launch.ps1` 会自动检测版本变化并重打补丁；若失败，重跑步骤 2–5。
 - **exe 写入失败** → App 还在运行，先关进程。
@@ -128,6 +149,7 @@ python codex-zh/sync_exe_hash.py "...\app\ChatGPT.exe" --from-log fatal.log
 - 版本 `26.1111.2228.0`，Store/MSIX 包
 - 工作副本 `C:\Users\Administrator\.codex\codex-localized\app`
 - 桌面快捷方式「Codex 本地化版」→ `launch.cmd`
-- 已部署 asar：2 处 `enable_i18n !0` + 5793 条中文 defaultMessage
+- 本机成品 asar 是早期"双机制"产物（1 处 bool + 5793 条冗余 defaultMessage），
+  **但复核证明汉化只依赖那 1 处 bool**——重新做时不要那 5793 条。
 - exe 内嵌哈希已同步为 Electron 报出的 actual：`02e1209c...672453`
 - 界面全中文 + 桥接 provider/模型正常，对话验证 `ZH_UI_SUCCESS`
