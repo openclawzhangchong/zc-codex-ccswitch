@@ -2,6 +2,24 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17（补充）
+
+### 新增 CodexBridge.exe：托盘 + WebUI + 桥接三合一（免源码）
+
+- 单文件 exe（`bridge/exe/CodexBridge.exe`，23MB）：双击即托盘图标 + 管理界面(:8789)
+  + 桥接(:8787)，不装 Python 也能用；首次运行生成通用配置模板（无真实 Key），
+  WebUI 里填自己的网关即可
+- 单 exe 双角色：主进程跑托盘，子进程用同一 exe + `--bridge` 跑桥接（托盘负责
+  拉起/重启），统一入口 `bridge/bridge_app.py`
+- 冻结环境适配：`__file__` 在只读 `_MEIPASS`，可写数据（config/.env/pid/日志/routes）
+  经 `BRIDGE_DATA_DIR` 重定向到 exe 同级 `bridge-data/`；源码模式无该变量时行为不变
+- 打包：`bridge/build-exe.cmd` 一键（建 venv→装依赖+PyInstaller→按 spec 打包），
+  `CodexBridge.spec` 关 UPX 降误报；requirements 补 pystray/Pillow
+- 实测：托盘进程正常、WebUI `/api/state` 与首页 200、POST `/api/restart` 成功拉起
+  `--bridge` 子进程、桥接 `/health` 200、端到端 Responses 对话返回标准结构
+- 文档：`bridge/exe/README.md`、README/AGENTS 指向 exe 方案；真实 key 的
+  config/.env/routes 加入 .gitignore，不随仓库分发
+
 ## 2026-11-17
 
 ### 🎉 界面中文化完成：官方 App 全中文界面（实测通过）
