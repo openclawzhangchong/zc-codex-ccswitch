@@ -13,9 +13,9 @@ function Get-CodexPatchRules {
     return @(
         @{
             Scope    = 'webview\assets'
-            Pattern  = 'a?.get(`enable_i18n`,!1)'
-            Replace  = 'a?.get(`enable_i18n`,!0)'
-            Desc     = '开启官方多语言开关 enable_i18n（关键，否则界面永远英文）'
+            Pattern  = 'get("enable_i18n",!1)'
+            Replace  = 'get("enable_i18n",!0)'
+            Desc     = '开启官方多语言开关 enable_i18n（唯一必需；递归扫描 async 子目录）'
             Critical = $true
         },
         @{
@@ -46,7 +46,8 @@ function Invoke-CodexPatchRule {
     if (-not (Test-Path -LiteralPath $scopeDir)) { return @{ Hits = 0; Files = @() } }
     $hits = 0
     $patchedFiles = @()
-    foreach ($js in (Get-ChildItem -LiteralPath $scopeDir -Filter '*.js' -File)) {
+    # 递归扫描：enable_i18n 实际在 webview\assets\async\ 子目录，非递归永远扫不到
+    foreach ($js in (Get-ChildItem -LiteralPath $scopeDir -Filter '*.js' -File -Recurse)) {
         $text = [System.IO.File]::ReadAllText($js.FullName)
         if (-not $text.Contains($Rule.Pattern)) { continue }
         $hits++
