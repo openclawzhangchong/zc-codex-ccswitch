@@ -2,6 +2,30 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17
+
+### 🎉 界面中文化完成：官方 App 全中文界面（实测通过）
+
+- 发现根因：官方 App 把整套简体中文翻译（**39772 条** FormatJS 消息）打包进了
+  app.asar（chunk `webview/assets/async/1561.*.js`），但语言开关 `enable_i18n`
+  由 Statsig 远程控制（Layer 72216192）且默认 `!1`——离线/受限网络拿不到配置，
+  翻译 chunk 成"孤儿"，界面回退英文
+- 汉化方案（工作副本，不动 WindowsApps 原版）：
+  1. 复制 Store 版到 `~/.codex/codex-localized/app`（可写）
+  2. 解包 app.asar，把 `enable_i18n` 默认值 `!1` → `!0`（前端主界面 1 处）
+  3. 用官方 `@electron/asar` 重打包（保留每文件 integrity 字段）
+  4. 更新 exe 内嵌 integrity 清单的 asar 哈希（PE 资源段 JSON）
+  5. 以 `--lang=zh-CN` 启动
+- 实测结果：菜单（文件/编辑/视图/帮助）、侧栏（新对话/定时任务/插件/项目/
+  最近）、主界面（我们要构建什么？）、底部（选择项目/完全访问）全部中文 ✅
+- exe 完整性校验踩坑：Electron 报错 `(expected vs actual)` 里的 actual 就是
+  对当前 asar 的计算值——把 exe 里的 expected 改成该值迭代一次即可；该哈希
+  **不是全文件 SHA256**，自算不可靠，必须让 Electron 自己报
+- 澄清旧结论：昨日"汉化不可行"仅指**直接改 WindowsApps**（只读+签名校验）；
+  工作副本方案绕开两者，当日即验证成功
+- 桥接联动：汉化副本读取同一份 `~/.codex/config.toml`，桥接 provider 与模型
+  选择不受影响；Computer use 仍为区域限制（维持不破解决策）
+
 ## 2026-11-16
 
 ## 2026-11-16
