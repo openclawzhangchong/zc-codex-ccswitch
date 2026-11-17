@@ -2,6 +2,21 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17（复核纠错）
+
+### 修正汉化文档：真正必需的只有 1 处 bool，5793 条 defaultMessage 替换是冗余的
+
+- 复核发现此前文档夸大：把"当时顺手做的 5793 条 defaultMessage 替换"误写成"必需的双机制"
+- 决定性证据：`enable_i18n=true` 后官方前端自动走 `locales/zh-CN.json → i.e(1561)`
+  加载 39772 条中文；已汉化成品里 "New chat"（id=`chatgptConversations.customGpt.newChat`）
+  等核心文案的 defaultMessage 仍是英文，界面却显示中文 → 翻译按 id 从 chunk 匹配，
+  与 defaultMessage 无关
+- 唯一必需的源码改动：`webview/assets/async/907538.*.js` 的 `get("enable_i18n",!1)` → `!0`
+  （另一处 `184348.*.js` 本来就是 `!0`）
+- `codex-zh/patch.py` 改为默认只改这一处；早期替换降为可选 `--with-messages`
+- README / AGENTS / docs/官方桌面App.md / 经验总结 / 汉化 SOP 全部同步纠正，
+  避免拉仓库的其他 AI 被误导去做无谓的大批量替换
+
 ## 2026-11-17（补充）
 
 ### 新增 CodexBridge.exe：托盘 + WebUI + 桥接三合一（免源码）
