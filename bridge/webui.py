@@ -38,7 +38,10 @@ from config_store import ConfigError, ConfigStore  # noqa: E402
 app = FastAPI(title="Codex bridge manager", docs_url=None, redoc_url=None)
 
 STORE: ConfigStore | None = None
-BRIDGE_DIR: Path = Path(__file__).parent
+_SOURCE_DIR: Path = Path(__file__).parent
+# 冻结后数据写到 exe 旁的 bridge-data/，源码/HTML 仍在 _SOURCE_DIR（只读）。
+BRIDGE_DIR: Path = Path(os.environ["BRIDGE_DATA_DIR"]).resolve() if os.environ.get("BRIDGE_DATA_DIR") else _SOURCE_DIR
+BRIDGE_DIR.mkdir(parents=True, exist_ok=True)
 BRIDGE_PIDFILE: Path = BRIDGE_DIR / ".bridge.pid"
 ENV_PATH: Path = BRIDGE_DIR / ".env"
 
@@ -177,8 +180,6 @@ def stop_bridge() -> bool:
 
 def start_bridge() -> int | None:
     """Launch api2codex detached. Returns the new pid if we could determine it."""
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    exe = pythonw if pythonw.exists() else Path(sys.executable)
     cfg = store()
     env = os.environ.copy()
     for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
@@ -190,9 +191,17 @@ def start_bridge() -> int | None:
     if os.name == "nt":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
 
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--bridge"]
+        cwd = str(BRIDGE_DIR)
+    else:
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        exe = pythonw if pythonw.exists() else Path(sys.executable)
+        cmd = [str(exe), str(_SOURCE_DIR / "api2codex.py")]
+        cwd = str(_SOURCE_DIR)
     proc = subprocess.Popen(
-        [str(exe), "api2codex.py"],
-        cwd=str(BRIDGE_DIR),
+        cmd,
+        cwd=cwd,
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -315,7 +324,7 @@ def stop() -> JSONResponse:
 # --------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    return (Path(__file__).parent / "webui.html").read_text(encoding="utf-8")
+    return (_SOURCE_DIR / "webui.html").read_text(encoding="utf-8")
 
 
 def main() -> None:
