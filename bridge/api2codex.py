@@ -37,7 +37,9 @@ DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 #    "routes": [{"prefix": "7864-", "base_url": "...", "api_key": "..."}]}
 # A model starting with a route prefix is forwarded to that upstream with the
 # prefix stripped; everything else goes to the default upstream.
-ROUTES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "routes.json")
+_DATA_DIR = os.environ.get("BRIDGE_DATA_DIR") or os.path.dirname(os.path.abspath(__file__))
+os.makedirs(_DATA_DIR, exist_ok=True)
+ROUTES_FILE = os.path.join(_DATA_DIR, "routes.json")
 ROUTES: dict = {
     "default": {"base_url": UPSTREAM_BASE_URL, "api_key": UPSTREAM_API_KEY},
     "routes": [],
@@ -708,7 +710,8 @@ async def health():
 
 # ── Main ───────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point for both `python api2codex.py` and the frozen exe --bridge role."""
     import uvicorn
 
     if not UPSTREAM_BASE_URL:
@@ -721,3 +724,7 @@ if __name__ == "__main__":
     log.info("Starting api2codex v%s on %s:%d", __version__, HOST, PORT)
     log.info("Upstream: %s", UPSTREAM_BASE_URL)
     uvicorn.run(app, host=HOST, port=PORT)
+
+
+if __name__ == "__main__":
+    main()
