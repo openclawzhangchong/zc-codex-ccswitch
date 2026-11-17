@@ -81,13 +81,17 @@ App 设置里的 *Computer use*（让 ChatGPT 驱动本机应用，如 Google Ch
 开关 `enable_i18n` 由 Statsig 远程控制（Layer 72216192），默认关闭且离线环境
 拿不到配置，导致翻译资源加载不到、界面回退英文。
 
-**汉化方案（已实测成功）**：
+**汉化方案（已实测成功；2026-11-17 复核修正）**：
 
 1. 复制 Store 版到可写副本（`~/.codex/codex-localized/app`，不动 WindowsApps）
-2. 注入**双机制补丁**（仓库 `codex-zh/patch.py` 一键完成，幂等）：
-   - ①解锁开关：`enable_i18n` Statsig 默认值 `!1` → `!0`（2 处，核心必需）
-   - ②补全消息：用官方翻译表（39772 条）把未翻译的 `defaultMessage` 换成中文
-     （实测 5793 条 / 15 文件；仅做①时部分文案仍英文，两者都做才是验证过的成品）
+2. **只改 1 处 bool**：`webview/assets/async/907538.*.js` 里
+   `get("enable_i18n",!1)` → `!0`（另一处 `184348.*.js` 本来就是 `!0`）。
+   可用仓库 `codex-zh/patch.py`（默认只改这一处，幂等）或手动改。
+   `enable_i18n=true` 后官方前端自动加载 `locales/zh-CN.json`（chunk 1561，
+   39772 条），界面全中文——**不需要批量替换 defaultMessage**。
+   > 复核证据：已汉化成品里 "New chat"（id=`chatgptConversations.customGpt.newChat`）
+   > 等核心文案的 defaultMessage 仍是英文，界面却显示中文，说明中文来自 chunk
+   > 按 id 匹配，而非默认文案。早期误做的 5793 条 defaultMessage 替换是冗余的。
 3. 重打包 app.asar（用官方 @electron/asar，保证每文件 integrity 字段）
 4. 更新 exe 内嵌 integrity 清单里的 asar 哈希（exe 资源段
    `[{"file":"resources\app.asar","alg":"SHA256","value":"..."}]`）
