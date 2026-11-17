@@ -17,6 +17,7 @@ __pycache__/
 # PyInstaller build artifacts (only bridge/exe/CodexBridge.exe is shipped)
 build/
 dist/
+bridge/.venv-build/
 *.spec.bak
 
 # Local runtime state: contains real API keys / PIDs — never commit

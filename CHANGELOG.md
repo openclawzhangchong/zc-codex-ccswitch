@@ -2,6 +2,32 @@
 
 本项目按时间倒序记录重要变更。完整提交历史见 [GitHub](https://github.com/openclawzhangchong/zc-codex-ccswitch/commits/main)。
 
+## 2026-11-17（桥接三处修复 + 重打包，BRIDGE-FIX-20261117）
+
+### 修复 CodexBridge.exe 在新机器上"装好却跑不通"的三个问题
+
+- **routes.json 占位模板永久遮蔽 .env**：exe 首启播种的 `routes.json` 带占位
+  default，而 WebUI 切换供应商只重写 `.env`，不同步 routes.json；api2codex 里
+  routes.json 优先级高于 .env → 配好网关后请求仍打向占位地址。修复：
+  `webui.py write_env()` 同步 routes.json 的 default（保留用户自定义前缀路由）
+- **/v1/models 给默认上游模型加 "_" 前缀**：`list_models()` 把哨兵值 `"_"`
+  当成真实前缀拼进模型 id（`_hy4flash-free`），而 `_resolve_upstream()` 并不
+  剥它 → 模型选择器/test-bridge.ps1 认不出模型。修复：默认目标前缀改为 `""`
+- **NO_PROXY 含 `[::1]` 时 httpx 全量崩溃**：部分宿主进程链注入
+  `NO_PROXY=...,[::1],::1`，httpx 解析方括号 IPv6 抛 `Invalid port: ':1]'`，
+  桥接每个上游请求 500。修复：api2codex.py 启动时剥掉 NO_PROXY 里的方括号
+- 重打包 `bridge/exe/CodexBridge.exe`（22.9MB）并在新机器实测：
+  `test-bridge.ps1 -Model hy4flash-free` 全 PASS；故意写坏 routes.json 后
+  WebUI PUT 供应商 → 自动同步回真实网关（回归通过）；流式 SSE 全事件序列正常；
+  `codex exec` 经桥真实回话；配 `model_catalog_json`（18 个网关模型 + 官方
+  base prompt）后 "Model metadata not found" 警告消失
+- 汉化副本桌面端端到端实测（同版本 26.1111.2228.0）：左上角须切到 **Codex**
+  模式（默认 ChatGPT Work 走云端登录态）；模型选择器经 `model_catalog_json`
+  列出网关模型，选 hy4flash-free 后中文对话真实回复；config.toml 的 `model`
+  须写 hy4flash-free（App 首启可能改写为自带默认模型）。「完成 Windows 设置」
+  横幅在 app-server 重连瞬间报「无法检查」属瞬态，点重试即恢复；store-copy
+  无 MSIX 包身份（no-package-identity），走 bundled 运行时，不影响桥接对话
+
 ## 2026-11-17（复核纠错）
 
 ### 修正汉化文档：真正必需的只有 1 处 bool，5793 条 defaultMessage 替换是冗余的

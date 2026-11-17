@@ -24,6 +24,13 @@ __version__ = "0.1.0"
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
+# httpx raises InvalidURL on NO_PROXY entries like "[::1]" (bracketed IPv6),
+# which kills every upstream request when the bridge inherits such an env.
+for _k in ("NO_PROXY", "no_proxy"):
+    _v = os.environ.get(_k)
+    if _v:
+        os.environ[_k] = _v.replace("[", "").replace("]", "")
+
 UPSTREAM_BASE_URL = os.environ.get("UPSTREAM_BASE_URL", "")
 UPSTREAM_API_KEY = os.environ.get("UPSTREAM_API_KEY", "")
 DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "")
@@ -675,7 +682,7 @@ async def handle_responses(request: Request):
 @app.get("/v1/models")
 async def list_models():
     """Merge models from every upstream; prefixed routes get prefixed ids."""
-    targets = [("_", ROUTES.get("default", {}))]
+    targets = [("", ROUTES.get("default", {}))]
     targets += [(r["prefix"], r) for r in ROUTES.get("routes", [])]
     merged = []
     seen = set()

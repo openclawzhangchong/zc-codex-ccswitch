@@ -120,6 +120,18 @@ def write_env(cfg: ConfigStore) -> None:
         f"SANITIZE_PROMPT={'1' if cfg.sanitize_prompt else ''}",
     ]
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="ascii", errors="replace")
+    # api2codex lets routes.json override .env; a stale placeholder default
+    # there would silently mask the provider we just activated.
+    routes_path = BRIDGE_DIR / "routes.json"
+    try:
+        routes = json.loads(routes_path.read_text(encoding="utf-8")) if routes_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        routes = {}
+    if not isinstance(routes, dict):
+        routes = {}
+    routes["default"] = {"base_url": active["base_url"], "api_key": active.get("api_key", "")}
+    routes.setdefault("routes", [])
+    routes_path.write_text(json.dumps(routes, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 CODEX_HOME = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
